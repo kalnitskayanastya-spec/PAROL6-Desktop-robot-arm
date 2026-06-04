@@ -164,7 +164,18 @@ void setup()
   digitalWrite(SUPPLY_ON_OFF, HIGH);
 
   // Disable all stepper drivers with hardware enable pin
+  pinMode(GLOBAL_ENABLE, OUTPUT);
+  pinMode(ENABLE_M1, OUTPUT);
+  pinMode(ENABLE_M2, OUTPUT);
+  pinMode(ENABLE_M3, OUTPUT);
+  pinMode(ENABLE_M4, OUTPUT);
+  pinMode(ENABLE_M5, OUTPUT);
   digitalWrite(GLOBAL_ENABLE, HIGH);
+  digitalWrite(ENABLE_M1, HIGH);
+  digitalWrite(ENABLE_M2, HIGH);
+  digitalWrite(ENABLE_M3, HIGH);
+  digitalWrite(ENABLE_M4, HIGH);
+  digitalWrite(ENABLE_M5, HIGH);
 // Delay so you can catch serial
 #if (DEBUG > 0)
   delay(3000);
@@ -1418,4 +1429,24 @@ void Init_motor_drivers(int num)
 #endif
 
   digitalWrite(Joint[num].SELECT, LOW);
+}
+
+void enable_motors()
+{
+  digitalWrite(GLOBAL_ENABLE, LOW);
+  digitalWrite(ENABLE_M1, LOW);
+  digitalWrite(ENABLE_M2, LOW);
+  digitalWrite(ENABLE_M3, LOW);
+  digitalWrite(ENABLE_M4, LOW);
+  digitalWrite(ENABLE_M5, LOW);
+}
+
+void disable_motors()
+{
+  digitalWrite(GLOBAL_ENABLE, HIGH);
+  digitalWrite(ENABLE_M1, HIGH);
+  digitalWrite(ENABLE_M2, HIGH);
+  digitalWrite(ENABLE_M3, HIGH);
+  digitalWrite(ENABLE_M4, HIGH);
+  digitalWrite(ENABLE_M5, HIGH);
 }
