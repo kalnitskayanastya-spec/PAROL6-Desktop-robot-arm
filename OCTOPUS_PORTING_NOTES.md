@@ -96,6 +96,30 @@ PAROL6 control board main software/src/octopus_clock.cpp
 - CAN все еще отключен;
 - нужна как более чистая сборка.
 
+### `octopus_parol6_limit_diag_0000`
+
+Безопасная diagnostic firmware для чтения LIMIT/Home входов.
+
+Свойства:
+
+- direct DFU;
+- старт с `0x08000000`;
+- CAN все еще отключен через `DISABLE_CAN_INIT_FOR_USB_TEST`;
+- обычная логика PAROL6 `loop()` не выполняется;
+- после diagnostic print в `loop()` стоит `return`;
+- моторы не должны двигаться;
+- homing не запускается;
+- step pulses не отправляются;
+- раз в секунду печатает состояние входов:
+  - `LIMIT1` / Stop0 / Joint1;
+  - `LIMIT2` / Stop1 / Joint2;
+  - `LIMIT3` / Stop2 / Joint3;
+  - `LIMIT4` / Stop3 / Joint4;
+  - `LIMIT5` / Stop4 / Joint5;
+  - `LIMIT6` / Stop5 / Joint6.
+
+Этот env нужен для будущей проверки Stop0-Stop5 без моторов, без homing и без движения.
+
 ## 6. Clock Configuration
 
 Файл:
@@ -234,6 +258,7 @@ PAROL6 control board main software/src/motor_init.cpp
 - Моторы не подключались.
 - 24V питание пока не проверено мультиметром.
 - Limit/home датчики физически не проверены.
+- `octopus_parol6_limit_diag_0000` уже создан и собирается, но физически Stop0-Stop5 еще не проверялись.
 - Optocoupler board физически не проверена.
 - E-stop физически не проверен.
 - CAN не включен.
@@ -257,9 +282,20 @@ PAROL6 control board main software/src/motor_init.cpp
 2. Проверить лабораторный блок питания мультиметром.
 3. Проверить правильность +24V/GND на POWER_IN.
 4. Не подключая TMC и моторы, проверить питание платы.
-5. Софтверно добавить отдельный diagnostic mode для чтения `LIMIT1`-`LIMIT6`.
-6. Проверить Stop0-Stop5 вручную через безопасное замыкание signal-GND или через опторазвязку.
+5. Diagnostic mode уже добавлен: `octopus_parol6_limit_diag_0000`.
+6. После появления рабочей батарейки 9V для мультиметра прошить `octopus_parol6_limit_diag_0000` и проверить Stop0-Stop5 вручную.
 7. Только потом подключать TMC5160 по одному.
 8. Проверить SPI communication с одним TMC.
 9. Потом проверить один мотор без механической нагрузки.
 10. Потом запускать homing только на минимальной скорости и с физическим выключением питания рядом.
+
+## 15. Текущее состояние на момент остановки
+
+- USB/clock проблема решена.
+- Плата подтвержденно живая.
+- PAROL6 firmware стартует на Octopus.
+- Debug и quiet env сохранены.
+- Limit diagnostic env создан.
+- Pin mapping Joint 1-6 приведен к физическому порядку Stop0-Stop5.
+- Дальше не продолжать hardware-тесты до рабочей батарейки 9V для мультиметра.
+- 24V пока не подавать.
