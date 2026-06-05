@@ -33,7 +33,8 @@ void Init_Joint_1(struct MotorStruct *Joint__)
     Joint__->position = -200;
     Joint__->speed = -100;
     Joint__->current = 0;
-    Joint__->LIMIT = LIMIT6;
+    // Octopus physical order: Joint 1 -> Stop0 / DIAG0.
+    Joint__->LIMIT = LIMIT1;
     Joint__->DIR = DIR1;
     Joint__->STEP = PUL1;
     Joint__->SELECT = SELECT1;
@@ -244,7 +245,8 @@ void Init_Joint_6(struct MotorStruct *Joint__)
     Joint__->position = 0;
     Joint__->speed = 0;
     Joint__->current = 0;
-    Joint__->LIMIT = LIMIT1;
+    // Octopus physical order: Joint 6 -> Stop5 / DIAG5.
+    Joint__->LIMIT = LIMIT6;
     Joint__->DIR = DIR3;
     Joint__->STEP = PUL3;
     Joint__->SELECT = SELECT3;
