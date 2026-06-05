@@ -142,8 +142,39 @@ void Get_data();
 void reset_homing();
 void Handle_gripper();
 
+#ifdef OCTOPUS_BOARD
+static void octopusDebugPrint(const char *msg)
+{
+  SerialUSB.println(msg);
+  SerialUSB.flush();
+  delay(20);
+}
+#else
+static void octopusDebugPrint(const char *)
+{
+}
+#endif
+
 void setup()
 {
+#ifdef OCTOPUS_BOARD
+  SerialUSB.begin(115200);
+  delay(2000);
+  SerialUSB.println("BOOT 00: earliest setup");
+  SerialUSB.flush();
+  delay(1000);
+  SerialUSB.println("BOOT 00: earliest setup");
+  SerialUSB.flush();
+  delay(1000);
+  SerialUSB.println("BOOT 00: earliest setup");
+  SerialUSB.flush();
+  delay(1000);
+  octopusDebugPrint("BOOT 01: setup entered");
+#endif
+
+  octopusDebugPrint("BOOT 02: before Serial begin");
+  Serial.begin(3000000);
+  octopusDebugPrint("BOOT 03: after Serial begin");
 
   /// Init Joint sturctures
   Init_Joint_1(&Joint[0]);
@@ -152,30 +183,38 @@ void setup()
   Init_Joint_4(&Joint[3]);
   Init_Joint_5(&Joint[4]);
   Init_Joint_6(&Joint[5]);
+  octopusDebugPrint("BOOT 04: joints initialized");
 
   /// Init motor directions
   Init_motor_direction();
+  octopusDebugPrint("BOOT 05: motor directions initialized");
   /// Init Inputs
   Init_Digital_Inputs();
+  octopusDebugPrint("BOOT 06: digital inputs initialized");
   /// Init Outputs
   Init_Digital_Outputs();
+  octopusDebugPrint("BOOT 07: digital outputs initialized");
 
   // enable supply pin
   digitalWrite(SUPPLY_ON_OFF, HIGH);
+  octopusDebugPrint("BOOT 08: supply pin set HIGH");
 
   // Disable all stepper drivers with hardware enable pin
+  octopusDebugPrint("BOOT 09: before enable pinMode");
   pinMode(GLOBAL_ENABLE, OUTPUT);
   pinMode(ENABLE_M1, OUTPUT);
   pinMode(ENABLE_M2, OUTPUT);
   pinMode(ENABLE_M3, OUTPUT);
   pinMode(ENABLE_M4, OUTPUT);
   pinMode(ENABLE_M5, OUTPUT);
+  octopusDebugPrint("BOOT 10: enable pinMode complete");
   digitalWrite(GLOBAL_ENABLE, HIGH);
   digitalWrite(ENABLE_M1, HIGH);
   digitalWrite(ENABLE_M2, HIGH);
   digitalWrite(ENABLE_M3, HIGH);
   digitalWrite(ENABLE_M4, HIGH);
   digitalWrite(ENABLE_M5, HIGH);
+  octopusDebugPrint("BOOT 11: enable pins set HIGH");
 // Delay so you can catch serial
 #if (DEBUG > 0)
   delay(3000);
@@ -184,29 +223,44 @@ void setup()
   // SPI1, and SPI4 can communicate at up to 45 Mbits/s, SPI2 and
   // SPI3 can communicate at up to 22.5 Mbit/s.
   // Init SPI (SPI 1 is used)
+  octopusDebugPrint("BOOT 12: before SPI init");
   SPI.setMOSI(MOSI);
   SPI.setMISO(MISO);
   SPI.setSCLK(SCK);
   SPI.setClockDivider(SPI_CLOCK_DIV4); // High speed (180 / 4 = 45 MHz SPI_1 speed)
   SPI.begin();
+  octopusDebugPrint("BOOT 13: after SPI init");
   // NOTE this delay is needed for normal operation of Power_switch_managment
   delay(200);
 
   /// Init ADC
+  octopusDebugPrint("BOOT 14: before ADC init");
+#ifndef DISABLE_CAN_INIT_FOR_USB_TEST
   HAL_Init();
+#endif
+  octopusDebugPrint("BOOT 15: HAL_Init skipped or complete");
   MX_ADC1_Init();
+  octopusDebugPrint("BOOT 16: MX_ADC1_Init complete");
   HAL_ADC_MspInit_(&hadc1);
+  octopusDebugPrint("BOOT 17: HAL_ADC_MspInit complete");
 
   // Enable all stepper drivers with hardware enable pin
+#ifndef DISABLE_CAN_INIT_FOR_USB_TEST
   digitalWrite(GLOBAL_ENABLE, LOW);
+#else
+  octopusDebugPrint("BOOT 18: motor enable LOW skipped");
+#endif
   // Sets some initial parameters to stepper drivers
 
+  octopusDebugPrint("BOOT 19: before TMC driver init");
   for (int i = 0; i < 6; i++)
   {
     Init_motor_drivers(i);
     delay(90);
   }
+  octopusDebugPrint("BOOT 20: after TMC driver init");
 
+  octopusDebugPrint("BOOT 21: before stepper config");
   stepper[5].setMaxSpeed(50000);
   stepper[5].setAcceleration(100);
   stepper[5].setSpeed(0);
@@ -230,15 +284,24 @@ void setup()
   stepper[4].setMaxSpeed(50000);
   stepper[4].setAcceleration(500);
   stepper[4].setSpeed(0);
+  octopusDebugPrint("BOOT 22: after stepper config");
 
   /// Freq is 90Mhz, with 128 prescale we get 703125, timer is 16bit
   /// It counts to 65535. 1 Tick is then equal to 1/703125 = 1.422222e-6
   /// To get 10 ms we need 7031 ticks
+  octopusDebugPrint("BOOT 23: before timer init");
   MyTim->setPrescaleFactor(128);
   MyTim->attachInterrupt(Update_IT_callback);
   MyTim->resume();
-  Serial.begin(3000000);
+  octopusDebugPrint("BOOT 24: after timer init");
+#ifndef DISABLE_CAN_INIT_FOR_USB_TEST
+  octopusDebugPrint("BOOT 25: before CAN init");
   Setup_CAN_bus();
+  octopusDebugPrint("BOOT 26: after CAN init");
+#else
+  octopusDebugPrint("BOOT 25: CAN init skipped");
+#endif
+  octopusDebugPrint("BOOT END: setup finished");
 }
 
 void loop()
@@ -253,6 +316,17 @@ void loop()
   Serial.println(state2);
   delay(2000);
   */
+
+#ifdef OCTOPUS_BOARD
+  static uint32_t lastLoopDebug = 0;
+  if (millis() - lastLoopDebug >= 1000)
+  {
+    lastLoopDebug = millis();
+    SerialUSB.print("LOOP alive, millis = ");
+    SerialUSB.println(millis());
+    SerialUSB.flush();
+  }
+#endif
 
   Power_switch_managment();
   static uint32_t last_time = 0;
@@ -471,7 +545,9 @@ void Get_data()
 {
 
   // Get data from CAN gripper
+#ifndef DISABLE_CAN_INIT_FOR_USB_TEST
   CAN_protocol(Serial);
+#endif
 
   // Get data from serial
   while (Serial.available() > 0)
