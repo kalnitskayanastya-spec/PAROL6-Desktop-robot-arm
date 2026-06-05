@@ -155,6 +155,17 @@ static void octopusDebugPrint(const char *)
 }
 #endif
 
+#if defined(OCTOPUS_BOARD) && defined(OCTOPUS_LIMIT_DIAGNOSTIC)
+static void octopusPrintLimitState(const char *label, uint8_t value)
+{
+  SerialUSB.print(label);
+  SerialUSB.print(" = ");
+  SerialUSB.print(value);
+  SerialUSB.print(" ");
+  SerialUSB.println(value == HIGH ? "HIGH" : "LOW");
+}
+#endif
+
 void setup()
 {
 #if defined(OCTOPUS_BOARD) && defined(OCTOPUS_BOOT_DEBUG)
@@ -326,6 +337,23 @@ void loop()
     SerialUSB.println(millis());
     SerialUSB.flush();
   }
+#endif
+
+#if defined(OCTOPUS_BOARD) && defined(OCTOPUS_LIMIT_DIAGNOSTIC)
+  static uint32_t lastLimitDiagnostic = 0;
+  if (millis() - lastLimitDiagnostic >= 1000)
+  {
+    lastLimitDiagnostic = millis();
+    SerialUSB.println("--- LIMIT DIAG ---");
+    octopusPrintLimitState("LIMIT1 Stop0 Joint1", digitalRead(LIMIT1));
+    octopusPrintLimitState("LIMIT2 Stop1 Joint2", digitalRead(LIMIT2));
+    octopusPrintLimitState("LIMIT3 Stop2 Joint3", digitalRead(LIMIT3));
+    octopusPrintLimitState("LIMIT4 Stop3 Joint4", digitalRead(LIMIT4));
+    octopusPrintLimitState("LIMIT5 Stop4 Joint5", digitalRead(LIMIT5));
+    octopusPrintLimitState("LIMIT6 Stop5 Joint6", digitalRead(LIMIT6));
+    SerialUSB.flush();
+  }
+  return;
 #endif
 
   Power_switch_managment();
