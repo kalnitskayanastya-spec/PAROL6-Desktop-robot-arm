@@ -142,7 +142,7 @@ void Get_data();
 void reset_homing();
 void Handle_gripper();
 
-#ifdef OCTOPUS_BOARD
+#if defined(OCTOPUS_BOARD) && defined(OCTOPUS_BOOT_DEBUG)
 static void octopusDebugPrint(const char *msg)
 {
   SerialUSB.println(msg);
@@ -157,7 +157,7 @@ static void octopusDebugPrint(const char *)
 
 void setup()
 {
-#ifdef OCTOPUS_BOARD
+#if defined(OCTOPUS_BOARD) && defined(OCTOPUS_BOOT_DEBUG)
   SerialUSB.begin(115200);
   delay(2000);
   SerialUSB.println("BOOT 00: earliest setup");
@@ -317,7 +317,7 @@ void loop()
   delay(2000);
   */
 
-#ifdef OCTOPUS_BOARD
+#if defined(OCTOPUS_BOARD) && defined(OCTOPUS_LOOP_HEARTBEAT)
   static uint32_t lastLoopDebug = 0;
   if (millis() - lastLoopDebug >= 1000)
   {
