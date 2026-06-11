@@ -2,407 +2,410 @@
 #include <SPI.h>
 #include <TMCStepper.h>
 
-#include "iodefs.h"
+#define Serial SerialUSB
 
-static constexpr uint8_t SLOT_COUNT = 6;
-static constexpr uint16_t MOTOR_CURRENT_MA_RMS = 200;
-static constexpr uint16_t MOTOR_MICROSTEPS = 16;
-static constexpr uint16_t MAX_STEP_COMMAND = 200;
-static constexpr uint16_t STEP_PULSE_DELAY_US = 1500;
+static const char *FIRMWARE_VERSION = "octopus_parol6_motor_slot_test_0000";
+static const int SLOT_COUNT = 6;
+static const int NO_SLOT = -1;
+static const int MAX_STEP_PULSES = 200;
+static const unsigned int STEP_PULSE_US = 500;
+static const float RUN_CURRENT_SCALE = 0.85f;
+static const float R_SENSE = 0.075f;
+static const uint16_t MICROSTEP = 32;
+static const uint16_t MOTOR1_MAX_CURRENT = 2000;
+static const uint16_t MOTOR2_MAX_CURRENT = 2000;
+static const uint16_t MOTOR3_MAX_CURRENT = 1900;
+static const uint16_t MOTOR4_MAX_CURRENT = 1700;
+static const uint16_t MOTOR5_MAX_CURRENT = 1700;
+static const uint16_t MOTOR6_MAX_CURRENT = 965;
 
 struct MotorSlot {
-  const char *motor;
+  const char *physical;
   const char *joint;
-  const char *stepLabel;
-  const char *dirLabel;
-  const char *csLabel;
-  const char *enLabel;
   uint32_t stepPin;
   uint32_t dirPin;
+  uint32_t enablePin;
   uint32_t csPin;
-  uint32_t enPin;
-  TMC5160Stepper *driver;
-  bool enabled;
-  bool dirState;
-  uint32_t stepCounter;
+  uint16_t maxCurrentMa;
 };
 
-static TMC5160Stepper motor0_driver(SELECT1, R_SENSE);
-static TMC5160Stepper motor1_driver(SELECT6, R_SENSE);
-static TMC5160Stepper motor2_driver(SELECT5, R_SENSE);
-static TMC5160Stepper motor3_driver(SELECT4, R_SENSE);
-static TMC5160Stepper motor4_driver(SELECT2, R_SENSE);
-static TMC5160Stepper motor5_driver(SELECT3, R_SENSE);
-
-static MotorSlot slots[SLOT_COUNT] = {
-  {"MOTOR0", "Joint1", "PF13", "PF12", "PC4", "PF14", PUL1, DIR1, SELECT1, GLOBAL_ENABLE, &motor0_driver, false, false, 0},
-  {"MOTOR1", "Joint2", "PG0", "PG1", "PD11", "PF15", PUL6, DIR6, SELECT6, ENABLE_M1, &motor1_driver, false, false, 0},
-  {"MOTOR2", "Joint3", "PF11", "PG3", "PC6", "PG5", PUL5, DIR5, SELECT5, ENABLE_M2, &motor2_driver, false, false, 0},
-  {"MOTOR3", "Joint4", "PG4", "PC1", "PC7", "PA0", PUL4, DIR4, SELECT4, ENABLE_M3, &motor3_driver, false, false, 0},
-  {"MOTOR4", "Joint5", "PF9", "PF10", "PF2", "PG2", PUL2, DIR2, SELECT2, ENABLE_M4, &motor4_driver, false, false, 0},
-  {"MOTOR5", "Joint6", "PC13", "PF0", "PE4", "PF1", PUL3, DIR3, SELECT3, ENABLE_M5, &motor5_driver, false, false, 0},
+static const MotorSlot slots[SLOT_COUNT] = {
+    {"MOTOR0", "Joint1", PF13, PF12, PF14, PC4, MOTOR1_MAX_CURRENT},
+    {"MOTOR1", "Joint2", PG0, PG1, PF15, PD11, MOTOR2_MAX_CURRENT},
+    {"MOTOR2", "Joint3", PF11, PG3, PG5, PC6, MOTOR3_MAX_CURRENT},
+    {"MOTOR3", "Joint4", PG4, PC1, PA0, PC7, MOTOR4_MAX_CURRENT},
+    {"MOTOR4", "Joint5", PF9, PF10, PG2, PF2, MOTOR5_MAX_CURRENT},
+    {"MOTOR5", "Joint6", PC13, PF0, PF1, PE4, MOTOR6_MAX_CURRENT},
 };
 
-static uint8_t selectedSlot = 0;
-static bool slotSelected = false;
-static String commandLine;
+static TMC5160Stepper drivers[SLOT_COUNT] = {
+    TMC5160Stepper(PC4, R_SENSE),
+    TMC5160Stepper(PD11, R_SENSE),
+    TMC5160Stepper(PC6, R_SENSE),
+    TMC5160Stepper(PC7, R_SENSE),
+    TMC5160Stepper(PF2, R_SENSE),
+    TMC5160Stepper(PE4, R_SENSE),
+};
 
-static void printHex32(const char *name, uint32_t value)
-{
-  SerialUSB.print("  ");
-  SerialUSB.print(name);
-  SerialUSB.print(" = 0x");
-  SerialUSB.println(value, HEX);
+static int selectedSlot = NO_SLOT;
+static bool enabled[SLOT_COUNT] = {false, false, false, false, false, false};
+static bool dirState[SLOT_COUNT] = {false, false, false, false, false, false};
+static long stepCounter[SLOT_COUNT] = {0, 0, 0, 0, 0, 0};
+
+const char *physicalConnectorName(int slot) {
+  if (slot < 0 || slot >= SLOT_COUNT) {
+    return "NONE";
+  }
+  return slots[slot].physical;
 }
 
-static void printSlotPins(const MotorSlot &slot)
-{
-  SerialUSB.print(slot.motor);
-  SerialUSB.print(" / ");
-  SerialUSB.print(slot.joint);
-  SerialUSB.print(" STEP=");
-  SerialUSB.print(slot.stepLabel);
-  SerialUSB.print(" DIR=");
-  SerialUSB.print(slot.dirLabel);
-  SerialUSB.print(" CS=");
-  SerialUSB.print(slot.csLabel);
-  SerialUSB.print(" EN=");
-  SerialUSB.println(slot.enLabel);
+const char *jointName(int slot) {
+  if (slot < 0 || slot >= SLOT_COUNT) {
+    return "NONE";
+  }
+  return slots[slot].joint;
 }
 
-static void disableAllMotors()
-{
-  for (uint8_t i = 0; i < SLOT_COUNT; i++) {
-    digitalWrite(slots[i].enPin, HIGH);
-    slots[i].enabled = false;
+bool validateSelectedSlot() {
+  if (selectedSlot < 0 || selectedSlot >= SLOT_COUNT) {
+    Serial.println(F("ERROR: no selected slot. Use select 0..5 first."));
+    return false;
+  }
+  return true;
+}
+
+static uint16_t currentSettingMa(int slot) {
+  return (uint16_t)(slots[slot].maxCurrentMa * RUN_CURRENT_SCALE);
+}
+
+static void setEnablePin(int slot, bool enable) {
+  digitalWrite(slots[slot].enablePin, enable ? LOW : HIGH);
+  enabled[slot] = enable;
+}
+
+static void disableAllMotors() {
+  for (int i = 0; i < SLOT_COUNT; ++i) {
+    setEnablePin(i, false);
   }
 }
 
-static void keepNonSelectedMotorsDisabled()
-{
-  for (uint8_t i = 0; i < SLOT_COUNT; i++) {
-    if (!slotSelected || i != selectedSlot) {
-      digitalWrite(slots[i].enPin, HIGH);
-      slots[i].enabled = false;
+static void setDirState(int slot, bool state) {
+  digitalWrite(slots[slot].dirPin, state ? HIGH : LOW);
+  dirState[slot] = state;
+}
+
+void printSlots() {
+  Serial.println(F("select 0 -> MOTOR0 / Joint1"));
+  Serial.println(F("select 1 -> MOTOR1 / Joint2"));
+  Serial.println(F("select 2 -> MOTOR2 / Joint3"));
+  Serial.println(F("MOTOR2_2 -> extra physical connector / duplicate MOTOR2 output, NOT select 3"));
+  Serial.println(F("select 3 -> MOTOR3 / Joint4, physically AFTER MOTOR2_2"));
+  Serial.println(F("select 4 -> MOTOR4 / Joint5"));
+  Serial.println(F("select 5 -> MOTOR5 / Joint6"));
+}
+
+void printWhere() {
+  if (!validateSelectedSlot()) {
+    return;
+  }
+
+  Serial.print(F("Selected slot "));
+  Serial.print(selectedSlot);
+  Serial.print(F(" = "));
+  Serial.print(physicalConnectorName(selectedSlot));
+  Serial.print(F(" / "));
+  Serial.println(jointName(selectedSlot));
+
+  Serial.print(F("Plug motor cable into physical "));
+  Serial.print(physicalConnectorName(selectedSlot));
+  Serial.println(F(" connector."));
+
+  if (selectedSlot == 3) {
+    Serial.println(F("Important: MOTOR3 is after MOTOR2_2 on the Octopus board."));
+    Serial.println(F("Do not plug into MOTOR2_2."));
+  }
+}
+
+void printSafety() {
+  Serial.println(F("SAFETY:"));
+  Serial.println(F("- All motors are disabled on startup."));
+  Serial.println(F("- Use disable before changing selected slot."));
+  Serial.println(F("- Turn PSU OUTPUT OFF before moving motor connector."));
+  Serial.println(F("- Never plug/unplug motors under power."));
+  Serial.println(F("- No homing in this firmware."));
+  Serial.println(F("- No automatic motion."));
+  Serial.println(F("- Max step command is 200 pulses."));
+}
+
+void printHelp() {
+  Serial.println(F("Commands:"));
+  Serial.println(F("help"));
+  Serial.println(F("slots"));
+  Serial.println(F("where"));
+  Serial.println(F("safe"));
+  Serial.println(F("select 0..5"));
+  Serial.println(F("status"));
+  Serial.println(F("all_status"));
+  Serial.println(F("enable"));
+  Serial.println(F("disable"));
+  Serial.println(F("dir 0"));
+  Serial.println(F("dir 1"));
+  Serial.println(F("step N"));
+  Serial.println(F("jog N"));
+}
+
+static void printSlotStatus(int slot) {
+  Serial.print(F("slot: "));
+  Serial.println(slot);
+  Serial.print(F("physical motor connector: "));
+  Serial.println(physicalConnectorName(slot));
+  Serial.print(F("joint: "));
+  Serial.println(jointName(slot));
+  Serial.print(F("enabled: "));
+  Serial.println(enabled[slot] ? F("YES") : F("NO"));
+  Serial.print(F("DIR state: "));
+  Serial.println(dirState[slot] ? 1 : 0);
+  Serial.print(F("step counter: "));
+  Serial.println(stepCounter[slot]);
+  Serial.print(F("TMC test_connection: "));
+  Serial.println(drivers[slot].test_connection());
+  Serial.print(F("version: "));
+  Serial.println(FIRMWARE_VERSION);
+  Serial.print(F("current setting mA: "));
+  Serial.println(currentSettingMa(slot));
+  Serial.print(F("microsteps: "));
+  Serial.println(MICROSTEP);
+}
+
+static void printStatus() {
+  if (!validateSelectedSlot()) {
+    return;
+  }
+  printSlotStatus(selectedSlot);
+}
+
+static void printAllStatus() {
+  for (int i = 0; i < SLOT_COUNT; ++i) {
+    printSlotStatus(i);
+    if (i < SLOT_COUNT - 1) {
+      Serial.println(F("---"));
     }
   }
 }
 
-static void setupSafePins()
-{
-  for (uint8_t i = 0; i < SLOT_COUNT; i++) {
-    pinMode(slots[i].enPin, OUTPUT);
-    digitalWrite(slots[i].enPin, HIGH);
-
-    pinMode(slots[i].stepPin, OUTPUT);
-    pinMode(slots[i].dirPin, OUTPUT);
-    digitalWrite(slots[i].stepPin, LOW);
-    digitalWrite(slots[i].dirPin, LOW);
-
-    pinMode(slots[i].csPin, OUTPUT);
-    digitalWrite(slots[i].csPin, HIGH);
-  }
-}
-
-static void configureDrivers()
-{
-  for (uint8_t i = 0; i < SLOT_COUNT; i++) {
-    TMC5160Stepper *driver = slots[i].driver;
-    driver->begin();
-    driver->setSPISpeed(2000000);
-    driver->rms_current(MOTOR_CURRENT_MA_RMS);
-    driver->en_pwm_mode(1);
-    driver->toff(4);
-    driver->blank_time(24);
-    driver->pwm_autoscale(1);
-    driver->microsteps(MOTOR_MICROSTEPS);
-  }
-}
-
-static void printHelp()
-{
-  SerialUSB.println("Commands:");
-  SerialUSB.println("  help        - print this help");
-  SerialUSB.println("  select 0    - select MOTOR0 / Joint1 and disable all motors");
-  SerialUSB.println("  select 1    - select MOTOR1 / Joint2 and disable all motors");
-  SerialUSB.println("  select 2    - select MOTOR2 / Joint3 and disable all motors");
-  SerialUSB.println("  select 3    - select MOTOR3 / Joint4 and disable all motors");
-  SerialUSB.println("  select 4    - select MOTOR4 / Joint5 and disable all motors");
-  SerialUSB.println("  select 5    - select MOTOR5 / Joint6 and disable all motors");
-  SerialUSB.println("  status      - print selected slot status");
-  SerialUSB.println("  all_status  - print brief SPI status for all slots");
-  SerialUSB.println("  enable      - enable only selected slot if SPI test_connection is OK");
-  SerialUSB.println("  disable     - disable all motors");
-  SerialUSB.println("  dir 0       - set selected DIR LOW");
-  SerialUSB.println("  dir 1       - set selected DIR HIGH");
-  SerialUSB.println("  step 10     - generate 10 slow STEP pulses if selected slot is enabled");
-  SerialUSB.println("  step 100    - generate 100 slow STEP pulses if selected slot is enabled");
-  SerialUSB.println("Max step command is 200 pulses.");
-}
-
-static void printStatus()
-{
-  keepNonSelectedMotorsDisabled();
-  if (!slotSelected) {
-    SerialUSB.println("--- MOTOR SLOT TEST STATUS ---");
-    SerialUSB.println("selected_slot = none");
-    SerialUSB.println("enabled = false");
-    SerialUSB.println("All motor EN pins are HIGH / disabled.");
-    return;
-  }
-
-  MotorSlot &slot = slots[selectedSlot];
-
-  SerialUSB.println("--- MOTOR SLOT TEST STATUS ---");
-  SerialUSB.print("selected_slot = ");
-  SerialUSB.println(selectedSlot);
-  printSlotPins(slot);
-  SerialUSB.print("enabled = ");
-  SerialUSB.println(slot.enabled ? "true" : "false");
-  SerialUSB.print("step_counter = ");
-  SerialUSB.println(slot.stepCounter);
-  SerialUSB.print("DIR = ");
-  SerialUSB.println(slot.dirState ? "HIGH" : "LOW");
-  SerialUSB.print("configured_current_mA_RMS = ");
-  SerialUSB.println(MOTOR_CURRENT_MA_RMS);
-  SerialUSB.print("configured_microsteps = ");
-  SerialUSB.println(MOTOR_MICROSTEPS);
-
-  const uint8_t connection = slot.driver->test_connection();
-  SerialUSB.print("  test_connection = ");
-  SerialUSB.println(connection);
-  SerialUSB.print("  version = 0x");
-  SerialUSB.println(slot.driver->version(), HEX);
-  printHex32("GSTAT", slot.driver->GSTAT());
-  printHex32("DRV_STATUS", slot.driver->DRV_STATUS());
-  printHex32("GCONF", slot.driver->GCONF());
-  printHex32("CHOPCONF", slot.driver->CHOPCONF());
-}
-
-static void printAllStatus()
-{
-  keepNonSelectedMotorsDisabled();
-  SerialUSB.println("--- ALL MOTOR SLOT SPI STATUS ---");
-  for (uint8_t i = 0; i < SLOT_COUNT; i++) {
-    MotorSlot &slot = slots[i];
-    SerialUSB.print("slot ");
-    SerialUSB.print(i);
-    SerialUSB.print(" ");
-    SerialUSB.print(slot.motor);
-    SerialUSB.print(" test_connection=");
-    SerialUSB.print(slot.driver->test_connection());
-    SerialUSB.print(" version=0x");
-    SerialUSB.print(slot.driver->version(), HEX);
-    SerialUSB.print(" enabled=");
-    SerialUSB.println(slot.enabled ? "true" : "false");
-  }
-}
-
-static void selectSlot(uint8_t slotIndex)
-{
-  if (slotIndex >= SLOT_COUNT) {
-    SerialUSB.println("ERROR: select slot must be 0..5.");
-    return;
-  }
-
-  disableAllMotors();
-  selectedSlot = slotIndex;
-  slotSelected = true;
-  SerialUSB.print("SELECTED SLOT ");
-  SerialUSB.println(selectedSlot);
-  printSlotPins(slots[selectedSlot]);
-  SerialUSB.println("All motor EN pins are HIGH / disabled after select.");
-}
-
-static void enableSelectedSlot()
-{
-  if (!slotSelected) {
-    SerialUSB.println("ERROR: select a motor slot first with 'select 0'..'select 5'.");
-    return;
-  }
-
-  MotorSlot &slot = slots[selectedSlot];
-  const uint8_t connection = slot.driver->test_connection();
-  if (connection != 0) {
-    SerialUSB.print("ERROR: TMC test_connection failed, not enabling. value=");
-    SerialUSB.println(connection);
-    disableAllMotors();
-    return;
-  }
-
-  disableAllMotors();
-  digitalWrite(slot.enPin, LOW);
-  slot.enabled = true;
-  SerialUSB.print(slot.motor);
-  SerialUSB.println(" ENABLED");
-}
-
-static void setDirection(bool high)
-{
-  if (!slotSelected) {
-    SerialUSB.println("ERROR: select a motor slot first with 'select 0'..'select 5'.");
-    return;
-  }
-
-  MotorSlot &slot = slots[selectedSlot];
-  slot.dirState = high;
-  digitalWrite(slot.dirPin, slot.dirState ? HIGH : LOW);
-  SerialUSB.print(slot.motor);
-  SerialUSB.print(" DIR ");
-  SerialUSB.println(slot.dirState ? "HIGH" : "LOW");
-}
-
-static void doSteps(uint16_t count)
-{
-  if (!slotSelected) {
-    SerialUSB.println("ERROR: select a motor slot first with 'select 0'..'select 5'.");
-    return;
-  }
-
-  MotorSlot &slot = slots[selectedSlot];
-  if (!slot.enabled) {
-    SerialUSB.println("ERROR: selected motor disabled. Run 'enable' before 'step'.");
-    return;
-  }
-
-  if (count == 0 || count > MAX_STEP_COMMAND) {
-    SerialUSB.println("ERROR: step count must be 1..200.");
-    return;
-  }
-
-  keepNonSelectedMotorsDisabled();
-  for (uint16_t i = 0; i < count; i++) {
-    digitalWrite(slot.stepPin, HIGH);
-    delayMicroseconds(STEP_PULSE_DELAY_US);
-    digitalWrite(slot.stepPin, LOW);
-    delayMicroseconds(STEP_PULSE_DELAY_US);
-    slot.stepCounter++;
-  }
-
-  SerialUSB.print("STEPS DONE = ");
-  SerialUSB.println(count);
-}
-
-static bool parseUnsignedArg(const String &line, const char *prefix, uint16_t *value)
-{
-  const size_t prefixLen = strlen(prefix);
-  if (!line.startsWith(prefix)) {
+static bool parseIntArgument(const String &command, const char *prefix, long *value) {
+  String prefixText(prefix);
+  if (!command.startsWith(prefixText)) {
     return false;
   }
 
-  String arg = line.substring(prefixLen);
+  String arg = command.substring(prefixText.length());
   arg.trim();
   if (arg.length() == 0) {
     return false;
   }
 
-  for (uint16_t i = 0; i < arg.length(); i++) {
-    if (!isDigit(arg[i])) {
-      return false;
-    }
-  }
-
-  const long parsed = arg.toInt();
-  if (parsed < 0 || parsed > 65535L) {
+  char *end = nullptr;
+  long parsed = strtol(arg.c_str(), &end, 10);
+  if (end == arg.c_str() || *end != '\0') {
     return false;
   }
 
-  *value = static_cast<uint16_t>(parsed);
+  *value = parsed;
   return true;
 }
 
-static void handleCommand(String line)
-{
-  line.trim();
-  line.toLowerCase();
+static void pulseSelectedMotor(unsigned int pulses) {
+  for (unsigned int i = 0; i < pulses; ++i) {
+    digitalWrite(slots[selectedSlot].stepPin, HIGH);
+    delayMicroseconds(STEP_PULSE_US);
+    digitalWrite(slots[selectedSlot].stepPin, LOW);
+    delayMicroseconds(STEP_PULSE_US);
+  }
+}
 
-  if (line.length() == 0) {
+bool parseStepLikeCommand(const String &command, const char *verb) {
+  long pulses = 0;
+  String prefix = String(verb) + " ";
+  if (!parseIntArgument(command, prefix.c_str(), &pulses)) {
+    return false;
+  }
+
+  if (!validateSelectedSlot()) {
+    return true;
+  }
+
+  if (!enabled[selectedSlot]) {
+    Serial.println(F("ERROR: selected slot is disabled. Use enable first."));
+    return true;
+  }
+
+  long magnitude = labs(pulses);
+  if (magnitude == 0) {
+    Serial.println(F("ERROR: pulse count must be non-zero."));
+    return true;
+  }
+  if (magnitude > MAX_STEP_PULSES) {
+    Serial.println(F("ERROR: max step command is 200 pulses."));
+    return true;
+  }
+
+  bool originalDir = dirState[selectedSlot];
+  bool usedDir = originalDir;
+  if (pulses < 0) {
+    usedDir = !originalDir;
+    setDirState(selectedSlot, usedDir);
+  }
+
+  pulseSelectedMotor((unsigned int)magnitude);
+  stepCounter[selectedSlot] += (pulses < 0) ? -magnitude : magnitude;
+
+  if (pulses < 0) {
+    setDirState(selectedSlot, originalDir);
+  }
+
+  Serial.print(F("Moved "));
+  Serial.print((int)magnitude);
+  Serial.print(F(" pulses on slot "));
+  Serial.print(selectedSlot);
+  Serial.print(F(" using DIR "));
+  Serial.print(usedDir ? 1 : 0);
+  if (pulses < 0) {
+    Serial.print(F(" (negative command; DIR restored to "));
+    Serial.print(originalDir ? 1 : 0);
+    Serial.print(F(")"));
+  }
+  Serial.println(F("."));
+  return true;
+}
+
+static void selectSlot(int slot) {
+  if (slot < 0 || slot >= SLOT_COUNT) {
+    Serial.println(F("ERROR: select slot must be 0..5."));
     return;
   }
 
-  if (line == "help") {
-    printHelp();
-  } else if (line == "status") {
-    printStatus();
-  } else if (line == "all_status") {
-    printAllStatus();
-  } else if (line == "enable") {
-    enableSelectedSlot();
-  } else if (line == "disable") {
-    disableAllMotors();
-    SerialUSB.println("ALL MOTORS DISABLED");
-  } else if (line == "dir 0") {
-    setDirection(false);
-  } else if (line == "dir 1") {
-    setDirection(true);
-  } else {
-    uint16_t value = 0;
-    if (parseUnsignedArg(line, "select ", &value)) {
-      if (value <= 5) {
-        selectSlot(static_cast<uint8_t>(value));
-      } else {
-        SerialUSB.println("ERROR: select slot must be 0..5.");
-      }
-    } else if (parseUnsignedArg(line, "step ", &value)) {
-      doSteps(value);
-    } else {
-      SerialUSB.println("Unknown command.");
-      printHelp();
-    }
-  }
-}
-
-static void pollSerialCommands()
-{
-  while (SerialUSB.available() > 0) {
-    const char c = static_cast<char>(SerialUSB.read());
-    if (c == '\n' || c == '\r') {
-      if (commandLine.length() > 0) {
-        handleCommand(commandLine);
-        commandLine = "";
-      }
-    } else if (commandLine.length() < 80) {
-      commandLine += c;
-    } else {
-      commandLine = "";
-      SerialUSB.println("ERROR: command too long.");
-      printHelp();
-    }
-  }
-}
-
-void setup()
-{
-  setupSafePins();
   disableAllMotors();
+  selectedSlot = slot;
 
-  SerialUSB.begin(115200);
+  Serial.print(F("Selected slot "));
+  Serial.print(selectedSlot);
+  Serial.print(F(" = "));
+  Serial.print(physicalConnectorName(selectedSlot));
+  Serial.print(F(" / "));
+  Serial.println(jointName(selectedSlot));
+  Serial.println(F("All motors disabled. Use where, safe, then enable."));
+}
+
+static void handleCommand(String command) {
+  command.trim();
+  if (command.length() == 0) {
+    return;
+  }
+
+  if (command == F("help")) {
+    printHelp();
+  } else if (command == F("slots")) {
+    printSlots();
+  } else if (command == F("where")) {
+    printWhere();
+  } else if (command == F("safe")) {
+    printSafety();
+  } else if (command == F("status")) {
+    printStatus();
+  } else if (command == F("all_status")) {
+    printAllStatus();
+  } else if (command == F("enable")) {
+    if (validateSelectedSlot()) {
+      disableAllMotors();
+      setEnablePin(selectedSlot, true);
+      Serial.print(F("Enabled slot "));
+      Serial.print(selectedSlot);
+      Serial.print(F(" only: "));
+      Serial.print(physicalConnectorName(selectedSlot));
+      Serial.print(F(" / "));
+      Serial.println(jointName(selectedSlot));
+    }
+  } else if (command == F("disable")) {
+    disableAllMotors();
+    Serial.println(F("All motors disabled."));
+  } else if (command.startsWith(F("select "))) {
+    long slot = 0;
+    if (parseIntArgument(command, "select ", &slot)) {
+      selectSlot((int)slot);
+    } else {
+      Serial.println(F("ERROR: use select 0..5."));
+    }
+  } else if (command.startsWith(F("dir "))) {
+    long dir = 0;
+    if (!parseIntArgument(command, "dir ", &dir) || (dir != 0 && dir != 1)) {
+      Serial.println(F("ERROR: use dir 0 or dir 1."));
+    } else if (validateSelectedSlot()) {
+      setDirState(selectedSlot, dir == 1);
+      Serial.print(F("DIR state for slot "));
+      Serial.print(selectedSlot);
+      Serial.print(F(" set to "));
+      Serial.println(dir);
+    }
+  } else if (command.startsWith(F("step "))) {
+    parseStepLikeCommand(command, "step");
+  } else if (command.startsWith(F("jog "))) {
+    parseStepLikeCommand(command, "jog");
+  } else {
+    Serial.print(F("Unknown command: "));
+    Serial.println(command);
+    Serial.println(F("Type help."));
+  }
+}
+
+static void initPins() {
+  for (int i = 0; i < SLOT_COUNT; ++i) {
+    pinMode(slots[i].stepPin, OUTPUT);
+    pinMode(slots[i].dirPin, OUTPUT);
+    pinMode(slots[i].enablePin, OUTPUT);
+    pinMode(slots[i].csPin, OUTPUT);
+    digitalWrite(slots[i].stepPin, LOW);
+    digitalWrite(slots[i].dirPin, LOW);
+    digitalWrite(slots[i].enablePin, HIGH);
+    digitalWrite(slots[i].csPin, HIGH);
+  }
+}
+
+static void initDrivers() {
+  SPI.setMOSI(PA7);
+  SPI.setMISO(PA6);
+  SPI.setSCLK(PA5);
+  SPI.begin();
+
+  for (int i = 0; i < SLOT_COUNT; ++i) {
+    drivers[i].begin();
+    drivers[i].rms_current(currentSettingMa(i));
+    drivers[i].en_pwm_mode(1);
+    drivers[i].toff(4);
+    drivers[i].blank_time(24);
+    drivers[i].pwm_autoscale(1);
+    drivers[i].microsteps(MICROSTEP);
+  }
+}
+
+void setup() {
+  Serial.begin(3000000);
   delay(1500);
 
-  SerialUSB.println();
-  SerialUSB.println("MOTOR SLOT TEST START");
-  SerialUSB.println("Startup state: all EN pins HIGH / disabled, no automatic movement.");
-
-  SPI.setMOSI(MOSI);
-  SPI.setMISO(MISO);
-  SPI.setSCLK(SCK);
-  SPI.begin();
-  configureDrivers();
+  initPins();
   disableAllMotors();
+  initDrivers();
 
-  SerialUSB.println("SPI initialized: MOSI PA7 / MISO PA6 / SCK PA5.");
-  SerialUSB.print("R_SENSE = ");
-  SerialUSB.println(R_SENSE, 3);
-  SerialUSB.print("configured_current_mA_RMS = ");
-  SerialUSB.println(MOTOR_CURRENT_MA_RMS);
-  SerialUSB.print("configured_microsteps = ");
-  SerialUSB.println(MOTOR_MICROSTEPS);
-  SerialUSB.println("selected_slot = none. Use 'select 0'..'select 5' before enabling.");
-  printHelp();
+  Serial.println(FIRMWARE_VERSION);
+  Serial.println(F("All motors disabled on startup."));
+  printSafety();
+  Serial.println(F("Type help."));
 }
 
-void loop()
-{
-  keepNonSelectedMotorsDisabled();
-  pollSerialCommands();
+void loop() {
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.replace("\r", "");
+    handleCommand(command);
+  }
 }
