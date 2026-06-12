@@ -76,6 +76,7 @@ static void printHelp()
   SerialUSB.println("status");
   SerialUSB.println("board");
   SerialUSB.println("pins");
+  SerialUSB.println("motor_backend");
   SerialUSB.println("limits");
   SerialUSB.println("motion_gate");
   SerialUSB.println("can_status");
@@ -154,6 +155,20 @@ static void printPins()
   SerialUSB.println("Joint4 / MOTOR3 STEP=PG4 DIR=PC1 EN=PA0 CS=PC7");
   SerialUSB.println("Joint5 / MOTOR4 STEP=PF9 DIR=PF10 EN=PG2 CS=PF2");
   SerialUSB.println("Joint6 / MOTOR5 STEP=PC13 DIR=PF0 EN=PF1 CS=PE4");
+}
+
+static void printMotorBackend()
+{
+  SerialUSB.println("Octopus motor backend: ACTIVE");
+  SerialUSB.println("Joint1 -> MOTOR0 STEP=PF13 DIR=PF12 EN=PF14 CS=PC4");
+  SerialUSB.println("Joint2 -> MOTOR1 STEP=PG0 DIR=PG1 EN=PF15 CS=PD11");
+  SerialUSB.println("Joint3 -> MOTOR2 STEP=PF11 DIR=PG3 EN=PG5 CS=PC6");
+  SerialUSB.println("Joint4 -> MOTOR3 STEP=PG4 DIR=PC1 EN=PA0 CS=PC7");
+  SerialUSB.println("Joint5 -> MOTOR4 STEP=PF9 DIR=PF10 EN=PG2 CS=PF2");
+  SerialUSB.println("Joint6 -> MOTOR5 STEP=PC13 DIR=PF0 EN=PF1 CS=PE4");
+  SerialUSB.println("SPI: MOSI=PA7 MISO=PA6 SCK=PA5");
+  SerialUSB.println("R_SENSE=0.075");
+  SerialUSB.println("Important: MOTOR2_2 is not logical Joint4.");
 }
 
 static void printLimits()
@@ -266,6 +281,8 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
     printLimits();
   } else if (strcmp(command, "pins") == 0) {
     printPins();
+  } else if (strcmp(command, "motor_backend") == 0) {
+    printMotorBackend();
   } else if (strcmp(command, "motion_gate") == 0) {
     printMotionGate();
   } else if (strcmp(command, "can_status") == 0) {
