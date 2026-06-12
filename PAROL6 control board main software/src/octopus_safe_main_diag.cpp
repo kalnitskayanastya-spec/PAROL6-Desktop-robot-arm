@@ -12,6 +12,7 @@
 #include "octopus_commander_safety.h"
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
 #include "octopus_safe_homing_dryrun.h"
+#include "octopus_safe_homing_executor.h"
 #include "octopus_safe_homing_preflight.h"
 #include "octopus_safe_limits.h"
 #endif
@@ -120,6 +121,19 @@ static void printHelp()
   SerialUSB.println("homing_dryrun_config N MAX_TRAVEL LIMIT_AT BACKOFF");
   SerialUSB.println("homing_dryrun_run N");
   SerialUSB.println("homing_dryrun_all");
+  SerialUSB.println("homing_exec_help");
+  SerialUSB.println("homing_exec_safe");
+  SerialUSB.println("homing_exec_status");
+  SerialUSB.println("homing_exec_check N");
+  SerialUSB.println("homing_exec_request N");
+  SerialUSB.println("homing_exec_arm N");
+  SerialUSB.println("homing_exec_run N");
+  SerialUSB.println("homing_exec_cancel");
+  SerialUSB.println("homing_exec_clear N");
+  SerialUSB.println("homing_exec_mark_limit_validated N");
+  SerialUSB.println("homing_exec_mark_polarity_validated N");
+  SerialUSB.println("homing_exec_mark_dryrun_passed N");
+  SerialUSB.println("homing_exec_policy");
   SerialUSB.println("motion_gate");
   SerialUSB.println("can_status");
   SerialUSB.println("tmc_status");
@@ -187,6 +201,7 @@ static void printVersion()
   SerialUSB.println("Homing: BLOCKED");
   SerialUSB.println("Homing preflight: available");
   SerialUSB.println("Homing dry-run: available");
+  SerialUSB.println("Homing executor skeleton: available");
   SerialUSB.println("Real homing: still BLOCKED");
   SerialUSB.println("Motion: BLOCKED");
   SerialUSB.println("CAN: timeout/fallback enabled");
@@ -371,6 +386,9 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
   if (octopusHomingDryRunHandleCommand(command)) {
     return;
   }
+  if (octopusHomingExecutorHandleCommand(command)) {
+    return;
+  }
 #endif
 
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
@@ -425,6 +443,7 @@ void octopusSafeMainDiagPrintStartupHint()
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
   octopusHomingPreflightPrintStartup();
   octopusHomingDryRunPrintStartup();
+  octopusHomingExecutorPrintStartup();
 #endif
   SerialUSB.flush();
 }

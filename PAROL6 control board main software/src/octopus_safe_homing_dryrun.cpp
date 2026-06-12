@@ -433,4 +433,28 @@ void octopusHomingDryRunPrintStartup()
   SerialUSB.flush();
 }
 
+bool octopusHomingDryRunConfigured(uint8_t jointIndex)
+{
+  if (jointIndex >= JOINT_COUNT) {
+    return false;
+  }
+  return dryRuns[jointIndex].configured;
+}
+
+bool octopusHomingDryRunLastPass(uint8_t jointIndex)
+{
+  if (jointIndex >= JOINT_COUNT) {
+    return false;
+  }
+  return dryRuns[jointIndex].state == DRYRUN_COMPLETE;
+}
+
+const char *octopusHomingDryRunLastResult(uint8_t jointIndex)
+{
+  if (jointIndex >= JOINT_COUNT) {
+    return "invalid joint";
+  }
+  return dryRuns[jointIndex].lastResult;
+}
+
 #endif

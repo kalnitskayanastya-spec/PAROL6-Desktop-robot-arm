@@ -8,6 +8,7 @@
 
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
 #include "octopus_safe_homing_dryrun.h"
+#include "octopus_safe_homing_executor.h"
 #include "octopus_safe_homing_preflight.h"
 #include "octopus_safe_limits.h"
 #endif
@@ -121,6 +122,7 @@ static void printJointTestHelp()
   SerialUSB.println("joint_safe");
   SerialUSB.println("homing_preflight_help");
   SerialUSB.println("homing_dryrun_help");
+  SerialUSB.println("homing_exec_help");
 }
 
 static void printJointSafe()
@@ -311,6 +313,7 @@ void octopusSafeJointTestPrintStartup()
   SerialUSB.println("Homing blocked. Commander motion blocked. Cartesian motion blocked.");
   SerialUSB.println("Homing preflight: available");
   SerialUSB.println("Homing dry-run: available");
+  SerialUSB.println("Homing executor skeleton: available");
   SerialUSB.println("Real homing: still BLOCKED");
   SerialUSB.println("Type joint_test_help.");
   SerialUSB.flush();
@@ -338,6 +341,10 @@ bool octopusSafeJointTestHandleCommand(const char *command)
     disableSelectedJoint();
   } else if (parseIntegerArgument(command, "joint_step ", &value)) {
     stepSelectedJoint(value);
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+  } else if (octopusHomingExecutorHandleCommand(command)) {
+    return true;
+#endif
   } else {
     return false;
   }

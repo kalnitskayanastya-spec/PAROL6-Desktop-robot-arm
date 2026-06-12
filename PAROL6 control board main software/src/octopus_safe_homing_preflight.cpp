@@ -425,4 +425,12 @@ const char *octopusHomingPreflightDirectionName(uint8_t jointIndex)
   return directionName(configs[jointIndex].direction);
 }
 
+bool octopusHomingPreflightDirectionValidated(uint8_t jointIndex)
+{
+  if (jointIndex >= JOINT_COUNT) {
+    return false;
+  }
+  return configs[jointIndex].directionValidated;
+}
+
 #endif
