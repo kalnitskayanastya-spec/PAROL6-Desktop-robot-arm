@@ -14,6 +14,7 @@ void octopusHomingPreflightPrintStartup();
 long octopusHomingPreflightMaxTravel(uint8_t jointIndex);
 const char *octopusHomingPreflightDirectionName(uint8_t jointIndex);
 bool octopusHomingPreflightDirectionValidated(uint8_t jointIndex);
+bool octopusHomingPreflightSetMaxTravel(uint8_t jointIndex, long steps);
 
 #endif
 

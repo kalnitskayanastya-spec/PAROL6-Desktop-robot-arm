@@ -7,6 +7,7 @@
 #include <string.h>
 
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "octopus_joint_config.h"
 #include "octopus_safe_homing_dryrun.h"
 #include "octopus_safe_homing_executor.h"
 #include "octopus_safe_homing_preflight.h"
@@ -123,6 +124,7 @@ static void printJointTestHelp()
   SerialUSB.println("homing_preflight_help");
   SerialUSB.println("homing_dryrun_help");
   SerialUSB.println("homing_exec_help");
+  SerialUSB.println("joint_config_help");
 }
 
 static void printJointSafe()
@@ -159,6 +161,21 @@ static void printJointStatus()
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
   SerialUSB.print("limit_blocks_joint_step=");
   SerialUSB.println(octopusSafeLimitsInitialized() ? "YES" : "NO");
+  if (selectedJoint != NO_JOINT) {
+    const OctopusJointConfig *config = octopusJointConfigGet((uint8_t)selectedJoint);
+    if (config != nullptr) {
+      SerialUSB.print("selected_joint_motor=");
+      SerialUSB.println(config->motorConnector);
+      SerialUSB.print("selected_joint_limit=");
+      SerialUSB.print(config->limitInput);
+      SerialUSB.print(" / ");
+      SerialUSB.println(config->limitAlias);
+      SerialUSB.print("selected_joint_dir_invert=");
+      SerialUSB.println(octopusJointConfigDirInverted((uint8_t)selectedJoint) ? "ON" : "OFF");
+      SerialUSB.print("selected_joint_safe_step_limit=");
+      SerialUSB.println(config->safeJointTestMaxStepCount);
+    }
+  }
 #endif
   SerialUSB.println("Mapping:");
   SerialUSB.println("Joint1 -> MOTOR0");
@@ -314,6 +331,8 @@ void octopusSafeJointTestPrintStartup()
   SerialUSB.println("Homing preflight: available");
   SerialUSB.println("Homing dry-run: available");
   SerialUSB.println("Homing executor skeleton: available");
+  SerialUSB.println("Joint config: available");
+  SerialUSB.println("Calibration values require validation before real motion");
   SerialUSB.println("Real homing: still BLOCKED");
   SerialUSB.println("Type joint_test_help.");
   SerialUSB.flush();
@@ -343,6 +362,8 @@ bool octopusSafeJointTestHandleCommand(const char *command)
     stepSelectedJoint(value);
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
   } else if (octopusHomingExecutorHandleCommand(command)) {
+    return true;
+  } else if (octopusJointConfigHandleCommand(command)) {
     return true;
 #endif
   } else {

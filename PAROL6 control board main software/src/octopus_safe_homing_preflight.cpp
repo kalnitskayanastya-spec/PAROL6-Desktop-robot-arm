@@ -255,7 +255,7 @@ static bool parseMaxTravelCommand(const char *command)
     return true;
   }
 
-  configs[jointIndex].maxTravelSteps = steps;
+  octopusHomingPreflightSetMaxTravel(jointIndex, steps);
   SerialUSB.print("Joint");
   SerialUSB.print(jointIndex + 1);
   SerialUSB.print(" max_travel_steps=");
@@ -415,6 +415,15 @@ long octopusHomingPreflightMaxTravel(uint8_t jointIndex)
     return 0;
   }
   return configs[jointIndex].maxTravelSteps;
+}
+
+bool octopusHomingPreflightSetMaxTravel(uint8_t jointIndex, long steps)
+{
+  if (jointIndex >= JOINT_COUNT || steps < 0 || steps > MAX_TRAVEL_STEPS) {
+    return false;
+  }
+  configs[jointIndex].maxTravelSteps = steps;
+  return true;
 }
 
 const char *octopusHomingPreflightDirectionName(uint8_t jointIndex)

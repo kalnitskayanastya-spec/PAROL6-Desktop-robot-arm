@@ -11,6 +11,7 @@
 #include "iodefs.h"
 #include "octopus_commander_safety.h"
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "octopus_joint_config.h"
 #include "octopus_safe_homing_dryrun.h"
 #include "octopus_safe_homing_executor.h"
 #include "octopus_safe_homing_preflight.h"
@@ -134,6 +135,18 @@ static void printHelp()
   SerialUSB.println("homing_exec_mark_polarity_validated N");
   SerialUSB.println("homing_exec_mark_dryrun_passed N");
   SerialUSB.println("homing_exec_policy");
+  SerialUSB.println("joint_config_help");
+  SerialUSB.println("joint_config_safe");
+  SerialUSB.println("joint_config_status");
+  SerialUSB.println("joint_config_show N");
+  SerialUSB.println("joint_config_all");
+  SerialUSB.println("joint_config_set_soft_limits N MIN_DEG MAX_DEG");
+  SerialUSB.println("joint_config_set_home_offset N OFFSET_DEG");
+  SerialUSB.println("joint_config_set_steps_per_deg N VALUE");
+  SerialUSB.println("joint_config_set_dir_invert N on");
+  SerialUSB.println("joint_config_set_dir_invert N off");
+  SerialUSB.println("joint_config_set_homing_max_travel N STEPS");
+  SerialUSB.println("joint_config_clear N");
   SerialUSB.println("motion_gate");
   SerialUSB.println("can_status");
   SerialUSB.println("tmc_status");
@@ -202,6 +215,8 @@ static void printVersion()
   SerialUSB.println("Homing preflight: available");
   SerialUSB.println("Homing dry-run: available");
   SerialUSB.println("Homing executor skeleton: available");
+  SerialUSB.println("Joint config: available");
+  SerialUSB.println("Calibration values require validation before real motion");
   SerialUSB.println("Real homing: still BLOCKED");
   SerialUSB.println("Motion: BLOCKED");
   SerialUSB.println("CAN: timeout/fallback enabled");
@@ -389,6 +404,9 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
   if (octopusHomingExecutorHandleCommand(command)) {
     return;
   }
+  if (octopusJointConfigHandleCommand(command)) {
+    return;
+  }
 #endif
 
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
@@ -444,6 +462,7 @@ void octopusSafeMainDiagPrintStartupHint()
   octopusHomingPreflightPrintStartup();
   octopusHomingDryRunPrintStartup();
   octopusHomingExecutorPrintStartup();
+  octopusJointConfigPrintStartup();
 #endif
   SerialUSB.flush();
 }
