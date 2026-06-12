@@ -147,6 +147,14 @@ static void printHelp()
   SerialUSB.println("joint_config_set_dir_invert N off");
   SerialUSB.println("joint_config_set_homing_max_travel N STEPS");
   SerialUSB.println("joint_config_clear N");
+  SerialUSB.println("calib_storage_safe");
+  SerialUSB.println("calib_storage_status");
+  SerialUSB.println("calib_storage_show");
+  SerialUSB.println("calib_storage_show N");
+  SerialUSB.println("calib_storage_set N FIELD VALUE");
+  SerialUSB.println("calib_storage_clear N");
+  SerialUSB.println("calib_storage_export");
+  SerialUSB.println("calib_storage_policy");
   SerialUSB.println("motion_gate");
   SerialUSB.println("can_status");
   SerialUSB.println("tmc_status");

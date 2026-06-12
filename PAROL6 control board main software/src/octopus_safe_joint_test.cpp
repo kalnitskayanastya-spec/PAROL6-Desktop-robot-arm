@@ -125,6 +125,8 @@ static void printJointTestHelp()
   SerialUSB.println("homing_dryrun_help");
   SerialUSB.println("homing_exec_help");
   SerialUSB.println("joint_config_help");
+  SerialUSB.println("calib_storage_status");
+  SerialUSB.println("calib_storage_export");
 }
 
 static void printJointSafe()

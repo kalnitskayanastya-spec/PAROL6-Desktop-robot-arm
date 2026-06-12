@@ -55,6 +55,7 @@ static const OctopusJointConfig defaultConfigs[JOINT_COUNT] = {
 };
 
 static OctopusJointConfig configs[JOINT_COUNT];
+static bool ramOverrideActive[JOINT_COUNT] = {false, false, false, false, false, false};
 static bool initialized = false;
 
 static void ensureInitialized()
@@ -75,6 +76,11 @@ const char *octopusJointConfigSourceName(OctopusJointConfigSource source)
   case OCTOPUS_PORT_CONFIRMED:
     return "OCTOPUS_PORT_CONFIRMED";
   case PLACEHOLDER_NOT_CONFIRMED:
+    return "PLACEHOLDER_NOT_CONFIRMED";
+  case MEASUREMENT_REQUIRED:
+    return "MEASUREMENT_REQUIRED";
+  case HARDWARE_VALIDATION_REQUIRED:
+    return "HARDWARE_VALIDATION_REQUIRED";
   default:
     return "PLACEHOLDER_NOT_CONFIRMED";
   }
@@ -87,8 +93,12 @@ static const char *onOff(bool value)
 
 static OctopusJointConfigSource aggregateSource(const OctopusJointConfig &config)
 {
-  if (config.stepsPerDegreeSource == PLACEHOLDER_NOT_CONFIRMED || config.softLimitsSource == PLACEHOLDER_NOT_CONFIRMED ||
-      config.homeOffsetSource == PLACEHOLDER_NOT_CONFIRMED || config.homingMaxTravelSource == PLACEHOLDER_NOT_CONFIRMED) {
+  if (config.stepsPerDegreeSource == PLACEHOLDER_NOT_CONFIRMED || config.stepsPerDegreeSource == MEASUREMENT_REQUIRED ||
+      config.stepsPerDegreeSource == HARDWARE_VALIDATION_REQUIRED || config.softLimitsSource == PLACEHOLDER_NOT_CONFIRMED ||
+      config.softLimitsSource == MEASUREMENT_REQUIRED || config.softLimitsSource == HARDWARE_VALIDATION_REQUIRED ||
+      config.homeOffsetSource == PLACEHOLDER_NOT_CONFIRMED || config.homeOffsetSource == MEASUREMENT_REQUIRED ||
+      config.homeOffsetSource == HARDWARE_VALIDATION_REQUIRED || config.homingMaxTravelSource == PLACEHOLDER_NOT_CONFIRMED ||
+      config.homingMaxTravelSource == MEASUREMENT_REQUIRED || config.homingMaxTravelSource == HARDWARE_VALIDATION_REQUIRED) {
     return PLACEHOLDER_NOT_CONFIRMED;
   }
   if (config.directionInvertSource == OCTOPUS_PORT_CONFIRMED || config.safeJointTestMaxStepSource == OCTOPUS_PORT_CONFIRMED) {
@@ -336,6 +346,7 @@ static bool parseSoftLimitsCommand(const char *command)
   configs[jointIndex].softMinDeg = minDeg;
   configs[jointIndex].softMaxDeg = maxDeg;
   configs[jointIndex].softLimitsSource = PLACEHOLDER_NOT_CONFIRMED;
+  ramOverrideActive[jointIndex] = true;
   configs[jointIndex].configSource = aggregateSource(configs[jointIndex]);
   SerialUSB.print("Joint");
   SerialUSB.print(jointIndex + 1);
@@ -372,6 +383,7 @@ static bool parseHomeOffsetCommand(const char *command)
   ensureInitialized();
   configs[jointIndex].homeOffsetDeg = offsetDeg;
   configs[jointIndex].homeOffsetSource = PLACEHOLDER_NOT_CONFIRMED;
+  ramOverrideActive[jointIndex] = true;
   configs[jointIndex].configSource = aggregateSource(configs[jointIndex]);
   SerialUSB.print("Joint");
   SerialUSB.print(jointIndex + 1);
@@ -408,6 +420,7 @@ static bool parseStepsPerDegreeCommand(const char *command)
   ensureInitialized();
   configs[jointIndex].stepsPerDegree = value;
   configs[jointIndex].stepsPerDegreeSource = PLACEHOLDER_NOT_CONFIRMED;
+  ramOverrideActive[jointIndex] = true;
   configs[jointIndex].configSource = aggregateSource(configs[jointIndex]);
   SerialUSB.print("Joint");
   SerialUSB.print(jointIndex + 1);
@@ -447,6 +460,7 @@ static bool parseDirInvertCommand(const char *command)
   ensureInitialized();
   configs[jointIndex].directionInverted = inverted;
   configs[jointIndex].directionInvertSource = PLACEHOLDER_NOT_CONFIRMED;
+  ramOverrideActive[jointIndex] = true;
   configs[jointIndex].configSource = aggregateSource(configs[jointIndex]);
   SerialUSB.print("Joint");
   SerialUSB.print(jointIndex + 1);
@@ -489,6 +503,7 @@ static bool parseHomingMaxTravelCommand(const char *command)
   ensureInitialized();
   configs[jointIndex].homingMaxTravelSteps = steps;
   configs[jointIndex].homingMaxTravelSource = PLACEHOLDER_NOT_CONFIRMED;
+  ramOverrideActive[jointIndex] = true;
   configs[jointIndex].configSource = aggregateSource(configs[jointIndex]);
   octopusHomingPreflightSetMaxTravel(jointIndex, steps);
   SerialUSB.print("Joint");
@@ -505,10 +520,336 @@ static void clearConfig(uint8_t jointIndex)
   }
 
   configs[jointIndex] = defaultConfigs[jointIndex];
+  ramOverrideActive[jointIndex] = false;
   octopusHomingPreflightSetMaxTravel(jointIndex, 0);
   SerialUSB.print("Joint");
   SerialUSB.print(jointIndex + 1);
   SerialUSB.println(" joint config RAM overrides cleared.");
+}
+
+static bool parseBoolValue(const char *value, bool *out)
+{
+  if (strcmp(value, "on") == 0 || strcmp(value, "true") == 0 || strcmp(value, "1") == 0) {
+    *out = true;
+    return true;
+  }
+  if (strcmp(value, "off") == 0 || strcmp(value, "false") == 0 || strcmp(value, "0") == 0) {
+    *out = false;
+    return true;
+  }
+  return false;
+}
+
+static uint8_t unconfirmedCriticalFieldCount()
+{
+  ensureInitialized();
+  uint8_t count = 0;
+  for (uint8_t i = 0; i < JOINT_COUNT; ++i) {
+    if (configs[i].stepsPerDegree <= 0.0f || configs[i].stepsPerDegreeSource == PLACEHOLDER_NOT_CONFIRMED ||
+        configs[i].stepsPerDegreeSource == MEASUREMENT_REQUIRED || configs[i].stepsPerDegreeSource == HARDWARE_VALIDATION_REQUIRED) {
+      ++count;
+    }
+    if (configs[i].softMinDeg >= configs[i].softMaxDeg || configs[i].softLimitsSource == PLACEHOLDER_NOT_CONFIRMED ||
+        configs[i].softLimitsSource == MEASUREMENT_REQUIRED || configs[i].softLimitsSource == HARDWARE_VALIDATION_REQUIRED) {
+      ++count;
+    }
+    if (configs[i].homeOffsetSource == PLACEHOLDER_NOT_CONFIRMED || configs[i].homeOffsetSource == MEASUREMENT_REQUIRED ||
+        configs[i].homeOffsetSource == HARDWARE_VALIDATION_REQUIRED) {
+      ++count;
+    }
+    if (configs[i].homingMaxTravelSteps <= 0 || configs[i].homingMaxTravelSource == PLACEHOLDER_NOT_CONFIRMED ||
+        configs[i].homingMaxTravelSource == MEASUREMENT_REQUIRED || configs[i].homingMaxTravelSource == HARDWARE_VALIDATION_REQUIRED) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+static uint8_t ramOverrideCount()
+{
+  uint8_t count = 0;
+  for (uint8_t i = 0; i < JOINT_COUNT; ++i) {
+    if (ramOverrideActive[i]) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+static void printCalibrationStorageSafe()
+{
+  SerialUSB.println("CALIBRATION STORAGE SAFE MODE");
+  SerialUSB.println("Primary storage is host-side JSON.");
+  SerialUSB.println("Firmware config is RAM-only.");
+  SerialUSB.println("No MCU flash writes are performed.");
+  SerialUSB.println("Values must be physically validated before real homing or full motion.");
+}
+
+static void printCalibrationStoragePolicy()
+{
+  SerialUSB.println("Calibration storage policy:");
+  SerialUSB.println("1. Host-side JSON is the source of editable calibration data.");
+  SerialUSB.println("2. Firmware accepts RAM-only overrides for bring-up/testing.");
+  SerialUSB.println("3. Compiled defaults/placeholders remain fallback.");
+  SerialUSB.println("4. Internal flash / EEPROM emulation is intentionally not implemented yet.");
+  SerialUSB.println("5. Real homing/full motion must not rely on placeholder values.");
+}
+
+static void printCalibrationStorageStatus()
+{
+  ensureInitialized();
+  const uint8_t overrides = ramOverrideCount();
+  const uint8_t unconfirmed = unconfirmedCriticalFieldCount();
+  SerialUSB.print("RAM overrides active: ");
+  SerialUSB.println(overrides > 0 ? "YES" : "NO");
+  SerialUSB.print("Joints configured: ");
+  SerialUSB.println(JOINT_COUNT);
+  SerialUSB.print("RAM override joints: ");
+  SerialUSB.println(overrides);
+  SerialUSB.print("Placeholder/unconfirmed critical fields: ");
+  SerialUSB.println(unconfirmed);
+  SerialUSB.println("Ready for read-only diagnostics: YES");
+  SerialUSB.println("Ready for safe joint testing: YES");
+  SerialUSB.println(unconfirmed == 0 ? "Ready for homing preflight: YES" : "Ready for homing preflight: PARTIAL");
+  SerialUSB.println("Ready for real homing: NO");
+  SerialUSB.println("Ready for full motion: NO");
+}
+
+static void printCalibrationExportJoint(uint8_t jointIndex)
+{
+  const OctopusJointConfig &config = configs[jointIndex];
+  SerialUSB.print("CALIB J");
+  SerialUSB.print(config.jointNumber);
+  SerialUSB.print(" motor=");
+  SerialUSB.print(config.motorConnector);
+  SerialUSB.print(" limit=");
+  SerialUSB.print(config.limitInput);
+  SerialUSB.print(" steps_per_degree=");
+  printFloatValue(config.stepsPerDegree);
+  SerialUSB.print(" steps_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.stepsPerDegreeSource));
+  SerialUSB.print(" direction_invert=");
+  SerialUSB.print(config.directionInverted ? "true" : "false");
+  SerialUSB.print(" direction_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.directionInvertSource));
+  SerialUSB.print(" soft_min_deg=");
+  printFloatValue(config.softMinDeg);
+  SerialUSB.print(" soft_max_deg=");
+  printFloatValue(config.softMaxDeg);
+  SerialUSB.print(" soft_limits_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.softLimitsSource));
+  SerialUSB.print(" home_offset_deg=");
+  printFloatValue(config.homeOffsetDeg);
+  SerialUSB.print(" home_offset_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.homeOffsetSource));
+  SerialUSB.print(" homing_max_travel_steps=");
+  SerialUSB.print(config.homingMaxTravelSteps);
+  SerialUSB.print(" homing_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.homingMaxTravelSource));
+  SerialUSB.print(" max_speed=");
+  printFloatValue(config.maxSpeed);
+  SerialUSB.print(" max_speed_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.maxSpeedSource));
+  SerialUSB.print(" max_acceleration=");
+  printFloatValue(config.maxAcceleration);
+  SerialUSB.print(" max_acceleration_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.maxAccelerationSource));
+  SerialUSB.print(" tmc_current_ma=");
+  SerialUSB.print(config.tmcCurrentMa);
+  SerialUSB.print(" tmc_current_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.tmcCurrentSource));
+  SerialUSB.print(" safe_joint_step_limit=");
+  SerialUSB.print(config.safeJointTestMaxStepCount);
+  SerialUSB.print(" safe_joint_step_status=");
+  SerialUSB.print(octopusJointConfigSourceName(config.safeJointTestMaxStepSource));
+  SerialUSB.print(" ram_override=");
+  SerialUSB.println(ramOverrideActive[jointIndex] ? "YES" : "NO");
+}
+
+static void printCalibrationExport()
+{
+  ensureInitialized();
+  SerialUSB.println("CALIB_EXPORT_BEGIN");
+  SerialUSB.println("policy=host_json_primary firmware_ram_only=true mcu_flash_writes=false eeprom_writes=false");
+  for (uint8_t i = 0; i < JOINT_COUNT; ++i) {
+    printCalibrationExportJoint(i);
+  }
+  SerialUSB.println("CALIB_EXPORT_END");
+}
+
+static bool setCalibrationField(uint8_t jointIndex, const char *field, const char *value)
+{
+  ensureInitialized();
+  OctopusJointConfig &config = configs[jointIndex];
+  float floatValue = 0.0f;
+  const char *tail = nullptr;
+
+  if (strcmp(field, "direction_invert") == 0) {
+    bool invert = false;
+    if (!parseBoolValue(value, &invert)) {
+      SerialUSB.println("ERROR: direction_invert requires on/off, true/false, or 1/0.");
+      return false;
+    }
+    config.directionInverted = invert;
+    config.directionInvertSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "steps_per_degree") == 0) {
+    if (!parseFloat(value, &floatValue, &tail) || *tail != '\0' || floatValue <= 0.0f) {
+      SerialUSB.println("ERROR: steps_per_degree requires a positive number.");
+      return false;
+    }
+    config.stepsPerDegree = floatValue;
+    config.stepsPerDegreeSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "soft_min_deg") == 0) {
+    if (!parseFloat(value, &floatValue, &tail) || *tail != '\0') {
+      SerialUSB.println("ERROR: soft_min_deg requires a number.");
+      return false;
+    }
+    if (floatValue >= config.softMaxDeg && config.softLimitsSource != PLACEHOLDER_NOT_CONFIRMED) {
+      SerialUSB.println("ERROR: soft_min_deg must be less than soft_max_deg.");
+      return false;
+    }
+    config.softMinDeg = floatValue;
+    config.softLimitsSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "soft_max_deg") == 0) {
+    if (!parseFloat(value, &floatValue, &tail) || *tail != '\0') {
+      SerialUSB.println("ERROR: soft_max_deg requires a number.");
+      return false;
+    }
+    if (floatValue <= config.softMinDeg && config.softLimitsSource != PLACEHOLDER_NOT_CONFIRMED) {
+      SerialUSB.println("ERROR: soft_max_deg must be greater than soft_min_deg.");
+      return false;
+    }
+    config.softMaxDeg = floatValue;
+    config.softLimitsSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "home_offset_deg") == 0) {
+    if (!parseFloat(value, &floatValue, &tail) || *tail != '\0') {
+      SerialUSB.println("ERROR: home_offset_deg requires a number.");
+      return false;
+    }
+    config.homeOffsetDeg = floatValue;
+    config.homeOffsetSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "homing_max_travel_steps") == 0) {
+    char *end = nullptr;
+    const long steps = strtol(value, &end, 10);
+    if (end == value || *end != '\0' || steps <= 0 || steps > MAX_HOMING_TRAVEL_STEPS) {
+      SerialUSB.println("ERROR: homing_max_travel_steps requires positive steps within safe max.");
+      return false;
+    }
+    config.homingMaxTravelSteps = steps;
+    config.homingMaxTravelSource = PLACEHOLDER_NOT_CONFIRMED;
+    octopusHomingPreflightSetMaxTravel(jointIndex, steps);
+  } else if (strcmp(field, "max_speed") == 0) {
+    if (!parseFloat(value, &floatValue, &tail) || *tail != '\0' || floatValue < 0.0f) {
+      SerialUSB.println("ERROR: max_speed requires a non-negative number.");
+      return false;
+    }
+    config.maxSpeed = floatValue;
+    config.maxSpeedSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "max_acceleration") == 0) {
+    if (!parseFloat(value, &floatValue, &tail) || *tail != '\0' || floatValue < 0.0f) {
+      SerialUSB.println("ERROR: max_acceleration requires a non-negative number.");
+      return false;
+    }
+    config.maxAcceleration = floatValue;
+    config.maxAccelerationSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "tmc_current_ma") == 0) {
+    char *end = nullptr;
+    const long current = strtol(value, &end, 10);
+    if (end == value || *end != '\0' || current <= 0 || current > 3000) {
+      SerialUSB.println("ERROR: tmc_current_ma requires a positive conservative mA value.");
+      return false;
+    }
+    config.tmcCurrentMa = (int)current;
+    config.tmcCurrentSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else if (strcmp(field, "safe_joint_step_limit") == 0) {
+    char *end = nullptr;
+    const long steps = strtol(value, &end, 10);
+    if (end == value || *end != '\0' || steps <= 0 || steps > PAROL6_OCTOPUS_JOINT_CONFIG_SAFE_TEST_MAX_STEPS) {
+      SerialUSB.println("ERROR: safe_joint_step_limit requires positive steps within the safe joint-test max.");
+      return false;
+    }
+    config.safeJointTestMaxStepCount = steps;
+    config.safeJointTestMaxStepSource = PLACEHOLDER_NOT_CONFIRMED;
+  } else {
+    SerialUSB.println("ERROR: unsupported calibration field.");
+    return false;
+  }
+
+  ramOverrideActive[jointIndex] = true;
+  config.configSource = aggregateSource(config);
+  SerialUSB.print("Joint");
+  SerialUSB.print(jointIndex + 1);
+  SerialUSB.print(" ");
+  SerialUSB.print(field);
+  SerialUSB.println(" updated (RAM-only, not persisted, status=PLACEHOLDER_NOT_CONFIRMED).");
+  return true;
+}
+
+static bool parseCalibrationStorageSetCommand(const char *command)
+{
+  static const char prefix[] = "calib_storage_set ";
+  const size_t prefixLen = strlen(prefix);
+  if (strncmp(command, prefix, prefixLen) != 0) {
+    return false;
+  }
+
+  uint8_t jointIndex = 0;
+  const char *tail = nullptr;
+  if (!parseJointNumber(command + prefixLen, &jointIndex, &tail) || *tail != ' ') {
+    SerialUSB.println("ERROR: calib_storage_set requires N FIELD VALUE.");
+    return true;
+  }
+  skipSpaces(&tail);
+
+  char field[32];
+  size_t fieldLen = 0;
+  while (tail[fieldLen] != '\0' && tail[fieldLen] != ' ' && fieldLen < sizeof(field) - 1) {
+    field[fieldLen] = tail[fieldLen];
+    ++fieldLen;
+  }
+  field[fieldLen] = '\0';
+  tail += fieldLen;
+  if (fieldLen == 0 || *tail != ' ') {
+    SerialUSB.println("ERROR: calib_storage_set requires FIELD VALUE.");
+    return true;
+  }
+  skipSpaces(&tail);
+  if (*tail == '\0') {
+    SerialUSB.println("ERROR: calib_storage_set requires VALUE.");
+    return true;
+  }
+
+  setCalibrationField(jointIndex, field, tail);
+  return true;
+}
+
+static bool parseCalibrationStorageCommand(const char *command)
+{
+  uint8_t jointIndex = 0;
+
+  if (strcmp(command, "calib_storage_safe") == 0) {
+    printCalibrationStorageSafe();
+  } else if (strcmp(command, "calib_storage_policy") == 0) {
+    printCalibrationStoragePolicy();
+  } else if (strcmp(command, "calib_storage_status") == 0) {
+    printCalibrationStorageStatus();
+  } else if (strcmp(command, "calib_storage_show") == 0) {
+    printCalibrationExport();
+  } else if (parseSingleJointCommand(command, "calib_storage_show ", &jointIndex)) {
+    if (jointIndex < JOINT_COUNT) {
+      printConfigDetail(jointIndex);
+    }
+  } else if (parseCalibrationStorageSetCommand(command)) {
+  } else if (parseSingleJointCommand(command, "calib_storage_clear ", &jointIndex)) {
+    if (jointIndex < JOINT_COUNT) {
+      clearConfig(jointIndex);
+    }
+  } else if (strcmp(command, "calib_storage_export") == 0) {
+    printCalibrationExport();
+  } else {
+    return false;
+  }
+  return true;
 }
 
 bool octopusJointConfigHandleCommand(const char *command)
@@ -517,6 +858,10 @@ bool octopusJointConfigHandleCommand(const char *command)
 
   if (strcmp(command, "joint_config_help") == 0) {
     printHelp();
+  } else if (strncmp(command, "calib_storage_", 14) == 0) {
+    if (!parseCalibrationStorageCommand(command)) {
+      return false;
+    }
   } else if (strcmp(command, "joint_config_safe") == 0) {
     printSafe();
   } else if (strcmp(command, "joint_config_status") == 0) {
