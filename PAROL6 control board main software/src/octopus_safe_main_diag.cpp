@@ -8,6 +8,7 @@
 
 #include "constants.h"
 #include "iodefs.h"
+#include "octopus_commander_safety.h"
 #include "octopus_safe_motion_gate.h"
 
 static char commandBuffer[80];
@@ -79,6 +80,11 @@ static void printHelp()
   SerialUSB.println("motion_gate");
   SerialUSB.println("can_status");
   SerialUSB.println("tmc_status");
+  SerialUSB.println("commander_status");
+  SerialUSB.println("commander_last");
+  SerialUSB.println("commander_counts");
+  SerialUSB.println("commander_reset");
+  SerialUSB.println("commander_policy");
 }
 
 static void printSafe()
@@ -266,6 +272,16 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
     printCanStatus();
   } else if (strcmp(command, "tmc_status") == 0) {
     printTmcStatus();
+  } else if (strcmp(command, "commander_status") == 0) {
+    octopusPrintCommanderStatus();
+  } else if (strcmp(command, "commander_last") == 0) {
+    octopusPrintLastCommanderCommand();
+  } else if (strcmp(command, "commander_counts") == 0) {
+    octopusPrintCommanderStats();
+  } else if (strcmp(command, "commander_reset") == 0) {
+    octopusResetCommanderStats();
+  } else if (strcmp(command, "commander_policy") == 0) {
+    octopusPrintCommanderPolicy();
   } else if (strcmp(command, "version") == 0) {
     printVersion();
   } else {

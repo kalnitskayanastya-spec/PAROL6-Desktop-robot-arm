@@ -25,6 +25,9 @@
 #include "CAN.h"
 #include "coms_CAN.h"
 #include "octopus_safe_motion_gate.h"
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+#include "octopus_commander_safety.h"
+#endif
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
 #include "octopus_safe_main_diag.h"
 #endif
@@ -178,6 +181,11 @@ static void printOctopusSafeMainReport()
   Serial.println("Homing commands: BLOCKED");
   Serial.println("Motion commands: BLOCKED");
   Serial.println("Motor enable from full firmware: BLOCKED");
+  Serial.println("Commander safety: ACTIVE");
+  Serial.println("Unknown host commands: BLOCKED");
+  Serial.println("Motion host commands: BLOCKED");
+  Serial.println("Homing host commands: BLOCKED");
+  Serial.println("Use commander_status for stats.");
   Serial.flush();
 }
 #endif
@@ -434,6 +442,7 @@ void loop()
 #if defined(PAROL6_SAFE_NO_MOTION)
   if (PAROL6.command == 69)
   {
+    octopusAllowCommanderCommand(PAROL6.command, "repeatability/test motion dispatch");
     blockOctopusSafeMotionCommand("repeatability/test motion");
   }
 #else
@@ -540,6 +549,7 @@ void loop()
     reset_homing();
     home_command = 0;
 #ifdef PAROL6_SAFE_NO_MOTION
+    octopusAllowCommanderCommand(PAROL6.command, "motor enable dispatch");
     blockOctopusSafeMotionCommand("motor enable from host command");
     PAROL6.disabled = 1;
 #else
@@ -564,18 +574,22 @@ void loop()
 #if defined(PAROL6_SAFE_NO_MOTION)
   if (PAROL6.command == 100)
   {
+    octopusAllowCommanderCommand(PAROL6.command, "homing dispatch");
     blockOctopusSafeMotionCommand("homing command");
   }
   else if (PAROL6.command == 255 && home_command == 1)
   {
+    octopusAllowCommanderCommand(PAROL6.command, "homing continuation dispatch");
     blockOctopusSafeMotionCommand("homing continuation");
   }
   else if (PAROL6.command == 123)
   {
+    octopusAllowCommanderCommand(PAROL6.command, "joint jog dispatch");
     blockOctopusSafeMotionCommand("joint jog command");
   }
   else if (PAROL6.command == 156)
   {
+    octopusAllowCommanderCommand(PAROL6.command, "go to position dispatch");
     blockOctopusSafeMotionCommand("go to position command");
   }
 #endif
@@ -743,17 +757,36 @@ void Get_data()
           Unpack_data(data_buffer);
           // Serial.println("ROBOT DATA PACK");
 
+          bool commanderCommandAllowed = true;
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+          commanderCommandAllowed = octopusAllowCommanderCommand(PAROL6.command, "Get_data packet");
+          if (!commanderCommandAllowed)
+          {
+            PAROL6.command = 255;
+            PAROL6.disabled = 1;
+            PAROL6.commanded_OUT1 = PAROL6.Out1;
+            PAROL6.commanded_OUT2 = PAROL6.Out2;
+            disable_motors();
+          }
+#endif
+
           // Read estop and inputs and write outputs
           
           PAROL6.In1 = digitalRead(INPUT1);
           PAROL6.In2 = digitalRead(INPUT2);
           PAROL6.Estop = digitalRead(ESTOP);
-          digitalWrite(OUTPUT1, PAROL6.commanded_OUT1);
-          digitalWrite(OUTPUT2, PAROL6.commanded_OUT2);
-          PAROL6.Out1 = PAROL6.commanded_OUT1;
-          PAROL6.Out2 = PAROL6.commanded_OUT2;
+          if (commanderCommandAllowed)
+          {
+            digitalWrite(OUTPUT1, PAROL6.commanded_OUT1);
+            digitalWrite(OUTPUT2, PAROL6.commanded_OUT2);
+            PAROL6.Out1 = PAROL6.commanded_OUT1;
+            PAROL6.Out2 = PAROL6.commanded_OUT2;
+          }
 
-          Handle_gripper();
+          if (commanderCommandAllowed)
+          {
+            Handle_gripper();
+          }
           Pack_data();
           // digitalWrite(DIR6,HIGH);
           // digitalWrite(DIR6,LOW);
