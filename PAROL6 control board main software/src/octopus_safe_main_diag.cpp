@@ -3,6 +3,7 @@
 #include "octopus_safe_main_diag.h"
 
 #include <Arduino.h>
+#include <TMCStepper.h>
 #include <ctype.h>
 #include <string.h>
 
@@ -13,6 +14,8 @@
 
 static char commandBuffer[80];
 static size_t commandLength = 0;
+
+extern TMC5160Stepper driver[];
 
 static const char *levelName(int value)
 {
@@ -27,6 +30,23 @@ static const char *yesNo(bool value)
 static char levelBit(int pin)
 {
   return digitalRead(pin) == HIGH ? '1' : '0';
+}
+
+static void printHex8(uint8_t value)
+{
+  SerialUSB.print("0x");
+  if (value < 0x10) {
+    SerialUSB.print("0");
+  }
+  SerialUSB.print(value, HEX);
+}
+
+static void printHex32(uint32_t value)
+{
+  SerialUSB.print("0x");
+  for (int shift = 28; shift >= 0; shift -= 4) {
+    SerialUSB.print((value >> shift) & 0x0F, HEX);
+  }
 }
 
 static bool isShellByte(int value)
@@ -263,8 +283,67 @@ static void printStatus(const Robot &robot, const MotorStruct joints[], int join
 
 static void printTmcStatus()
 {
-  SerialUSB.println("TMC read-only status is not wired into safe main yet.");
-  SerialUSB.println("Use octopus_parol6_motor_slot_test_0000 for TMC SPI diagnostic.");
+  static const char *jointNames[] = {"Joint1", "Joint2", "Joint3", "Joint4", "Joint5", "Joint6"};
+  static const char *motorNames[] = {"MOTOR0", "MOTOR1", "MOTOR2", "MOTOR3", "MOTOR4", "MOTOR5"};
+  static const char *csNames[] = {"PC4", "PD11", "PC6", "PC7", "PF2", "PE4"};
+
+  SerialUSB.println("--- TMC5160 READ-ONLY STATUS ---");
+  SerialUSB.println("Mode: SAFE_MAIN read-only");
+  SerialUSB.println("No motors enabled. No motion. No register writes.");
+  SerialUSB.println("This command is read-only.");
+  SerialUSB.println("It does not enable motors.");
+  SerialUSB.println("It does not move the robot.");
+  SerialUSB.println("Expected good TMC version for TMC5160 is usually 0x30.");
+  SerialUSB.println("Expected good test_connection result is 0.");
+
+  for (int i = 0; i < 6; ++i) {
+    const uint8_t connection = driver[i].test_connection();
+    const uint8_t version = driver[i].version();
+    const uint8_t gstat = driver[i].GSTAT();
+    const uint32_t drvStatus = driver[i].DRV_STATUS();
+    const uint32_t gconf = driver[i].GCONF();
+    const uint32_t chopconf = driver[i].CHOPCONF();
+
+    SerialUSB.println();
+    SerialUSB.print(jointNames[i]);
+    SerialUSB.print(" / ");
+    SerialUSB.print(motorNames[i]);
+    SerialUSB.print(" CS=");
+    SerialUSB.print(csNames[i]);
+    SerialUSB.println(":");
+
+    SerialUSB.print("  test_connection = ");
+    SerialUSB.println(connection);
+    SerialUSB.print("  version = ");
+    printHex8(version);
+    SerialUSB.println();
+    SerialUSB.print("  GSTAT = ");
+    printHex8(gstat);
+    SerialUSB.println();
+    SerialUSB.print("  DRV_STATUS = ");
+    printHex32(drvStatus);
+    SerialUSB.println();
+    SerialUSB.print("  GCONF = ");
+    printHex32(gconf);
+    SerialUSB.println();
+    SerialUSB.print("  CHOPCONF = ");
+    printHex32(chopconf);
+    SerialUSB.println();
+
+    if (connection != 0) {
+      SerialUSB.print("WARNING: TMC communication problem on ");
+      SerialUSB.print(jointNames[i]);
+      SerialUSB.print(" / ");
+      SerialUSB.print(motorNames[i]);
+      SerialUSB.println(".");
+      SerialUSB.println("Check CS wiring/pin mapping/SPI/driver power.");
+    }
+
+    if (version != 0x30) {
+      SerialUSB.println("WARNING: Unexpected TMC version.");
+      SerialUSB.println("Expected TMC5160 version 0x30.");
+    }
+  }
 }
 
 static void processCommand(const char *command, Robot &robot, MotorStruct joints[], int jointCount)
