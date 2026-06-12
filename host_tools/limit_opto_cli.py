@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host-side CLI for the octopus_parol6_limit_opto_diag_0000 firmware.
+"""Host-side CLI for Octopus limit/opto diagnostic firmware.
 
 The firmware is input-only: it reads Octopus Stop0..Stop5 inputs and reports
 their raw/debounced states. This tool sends one text command over USB Serial
@@ -29,13 +29,15 @@ PORT_PATTERNS = (
 
 NO_ARG_COMMANDS = {
     "help",
+    "version",
     "status",
     "raw",
     "counts",
     "reset_counts",
     "safe",
 }
-MODE_COMMANDS = {"stream", "invert", "pullup"}
+MODE_COMMANDS = {"stream", "invert", "pullup", "active_low"}
+MAX_DEBOUNCE_MS = 1000
 
 
 def import_serial():
@@ -59,8 +61,9 @@ def detect_ports() -> list[str]:
 
 def usage_text() -> str:
     return (
-        "Supported commands: help, status, raw, counts, reset_counts, safe, "
-        "stream on|off, invert on|off, pullup on|off"
+        "Supported commands: help, version, status, raw, counts, reset_counts, safe, "
+        "stream on|off, active_low on|off, pullup on|off, debounce [0..1000], "
+        "invert on|off"
     )
 
 
@@ -76,6 +79,19 @@ def build_firmware_command(tokens: list[str]) -> str:
         if args:
             raise ValueError(f"{command} does not take arguments. {usage_text()}")
         return command
+
+    if command == "debounce":
+        if not args:
+            return command
+        if len(args) != 1:
+            raise ValueError(f"debounce accepts zero or one value. {usage_text()}")
+        try:
+            debounce_ms = int(args[0], 10)
+        except ValueError:
+            raise ValueError("debounce value must be an integer in range 0..1000.") from None
+        if debounce_ms < 0 or debounce_ms > MAX_DEBOUNCE_MS:
+            raise ValueError("debounce value must be in range 0..1000.")
+        return f"debounce {debounce_ms}"
 
     if command in MODE_COMMANDS:
         if len(args) != 1 or args[0] not in ("on", "off"):
@@ -178,7 +194,7 @@ def append_log(log_path: str, port: str, firmware_command: str, response: str) -
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Talk to octopus_parol6_limit_opto_diag_0000 over USB Serial."
+        description="Talk to Octopus limit/opto diagnostic firmware over USB Serial."
     )
     parser.add_argument("command", nargs="*", help="Firmware command, for example: stream on")
     parser.add_argument("--port", help="Serial port, for example /dev/cu.usbmodem1234")
