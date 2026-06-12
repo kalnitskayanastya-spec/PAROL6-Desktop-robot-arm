@@ -299,6 +299,45 @@ def decode_response_packet(packet: bytes) -> dict[str, Any]:
     }
 
 
+def decode_response_compat(packet: bytes) -> dict[str, Any]:
+    """Decode a firmware response as far as the confirmed map allows.
+
+    The full firmware-to-host packet shape is confirmed from Pack_data(), but
+    host-side captures may be partial or noisy. This helper keeps raw bytes
+    visible and marks unknown fields instead of pretending malformed captures
+    are valid response facts.
+    """
+    result: dict[str, Any] = {
+        "raw_hex": bytes_to_hex(packet),
+        "raw_length": len(packet),
+        "start_bytes_expected": bytes_to_hex(START_BYTES),
+        "end_bytes_expected": bytes_to_hex(END_BYTES),
+        "start_bytes_present": packet.startswith(START_BYTES),
+        "end_bytes_present": packet.endswith(END_BYTES),
+        "format_status": "partial_or_unknown",
+        "message": "Response format partially confirmed; unknown fields are shown as raw bytes.",
+        "unknown_raw_bytes": bytes_to_hex(packet),
+    }
+    if len(packet) >= 4:
+        result["length_byte"] = packet[3]
+        result["expected_total_length"] = 4 + packet[3]
+    else:
+        result["length_byte"] = "unknown"
+        result["expected_total_length"] = "unknown"
+
+    try:
+        decoded = decode_response_packet(packet)
+    except ProtocolError as exc:
+        result["decode_error"] = str(exc)
+        return result
+
+    result.update(decoded)
+    result["format_status"] = "confirmed_firmware_to_host"
+    result["message"] = "Response format fully decoded for confirmed Pack_data() fields."
+    result.pop("unknown_raw_bytes", None)
+    return result
+
+
 def decode_packet(packet: bytes) -> dict[str, Any]:
     length, _payload = _split_frame(packet)
     if length == HOST_TO_FIRMWARE_LEN:
@@ -306,3 +345,12 @@ def decode_packet(packet: bytes) -> dict[str, Any]:
     if length == FIRMWARE_TO_HOST_LEN:
         return decode_response_packet(packet)
     raise ProtocolError(f"Unsupported packet length byte {length}. Confirmed lengths are 52 and 56.")
+
+
+def safest_readonly_command_id(path: str | Path | None = None) -> int:
+    commands = load_command_map(path)
+    for command_id in sorted(commands):
+        info = commands[command_id]
+        if info.risk == CommandRisk.READ_ONLY and info.allowed_in_safe_host_probe:
+            return command_id
+    raise SafetyError("No confirmed READ_ONLY Commander command is available.")
