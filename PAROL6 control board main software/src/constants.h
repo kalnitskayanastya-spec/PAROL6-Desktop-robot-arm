@@ -16,7 +16,9 @@
 
 #define ADC_RESOLUTION 12
 
+#ifndef R_SENSE
 #define R_SENSE 0.075f
+#endif
 
 #define NUMBER_OF_JOINTS 6
 

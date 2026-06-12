@@ -71,9 +71,16 @@ unsigned int Combine_2_CAN_ID(unsigned int Node_ID, unsigned int Command_ID, boo
 void Setup_CAN_bus()
 {
     bool ret = CANInit(CAN_1000KBPS, 2);
-    if (!ret)
+    if (!ret) {
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+        SerialUSB.println("WARNING: CAN init timed out; continuing in safe USB mode.");
+        SerialUSB.flush();
+        return;
+#else
         while (true)
             ;
+#endif
+    }
 }
 
 /// @brief CAN protocol

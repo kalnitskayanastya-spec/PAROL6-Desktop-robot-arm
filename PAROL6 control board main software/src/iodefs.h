@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "board_octopus_pro_f446.h"
+#else
+
 // STEP пины
 #define PUL1  PF13   // Joint 1 → MOTOR0
 #define PUL6  PG0    // Joint 2 → MOTOR1
@@ -80,3 +84,5 @@
 
 // R_SENSE для TMC5160T Pro
 #define R_SENSE  0.075f
+
+#endif

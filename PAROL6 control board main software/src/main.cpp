@@ -142,6 +142,21 @@ void Get_data();
 void reset_homing();
 void Handle_gripper();
 
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+static void printOctopusSafeMainReport()
+{
+  Serial.println("--- PAROL6 OCTOPUS SAFE MAIN ---");
+  Serial.println("Board: BIGTREETECH Octopus Pro F446");
+  Serial.println("Mode: SAFE_NO_MOTION");
+  Serial.println("USB: enabled");
+  Serial.println("CAN: timeout/fallback enabled");
+  Serial.println("Motors: disabled on startup");
+  Serial.println("Homing: disabled");
+  Serial.println("Motion: disabled unless explicitly enabled later");
+  Serial.flush();
+}
+#endif
+
 #if defined(OCTOPUS_BOARD) && defined(OCTOPUS_BOOT_DEBUG)
 static void octopusDebugPrint(const char *msg)
 {
@@ -185,6 +200,10 @@ void setup()
 
   octopusDebugPrint("BOOT 02: before Serial begin");
   Serial.begin(3000000);
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+  delay(500);
+  printOctopusSafeMainReport();
+#endif
   octopusDebugPrint("BOOT 03: after Serial begin");
 
   /// Init Joint sturctures
@@ -256,7 +275,10 @@ void setup()
   octopusDebugPrint("BOOT 17: HAL_ADC_MspInit complete");
 
   // Enable all stepper drivers with hardware enable pin
-#ifndef DISABLE_CAN_INIT_FOR_USB_TEST
+#if defined(PAROL6_SAFE_NO_MOTION)
+  disable_motors();
+  octopusDebugPrint("BOOT 18: motor enable LOW skipped for safe no-motion");
+#elif !defined(DISABLE_CAN_INIT_FOR_USB_TEST)
   digitalWrite(GLOBAL_ENABLE, LOW);
 #else
   octopusDebugPrint("BOOT 18: motor enable LOW skipped");
@@ -270,6 +292,11 @@ void setup()
     delay(90);
   }
   octopusDebugPrint("BOOT 20: after TMC driver init");
+
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+  PAROL6.disabled = 1;
+  disable_motors();
+#endif
 
   octopusDebugPrint("BOOT 21: before stepper config");
   stepper[5].setMaxSpeed(50000);
@@ -367,6 +394,7 @@ void loop()
 
   /// Robot repetability
 
+#ifndef PAROL6_SAFE_NO_MOTION
   if (PAROL6.command == 69)
   {
     if (setup_var == 0)
@@ -446,6 +474,7 @@ void loop()
       }
     }
   }
+#endif
 
   // Dummy command
   if (PAROL6.command == 255)
@@ -468,7 +497,11 @@ void loop()
   {
     reset_homing();
     home_command = 0;
+#ifdef PAROL6_SAFE_NO_MOTION
+    PAROL6.disabled = 1;
+#else
     PAROL6.disabled = 0;
+#endif
   }
 
   /// Disable robot
@@ -488,7 +521,9 @@ void loop()
   // If robot is disabled, disable all move commands
   if (PAROL6.disabled == 0)
   {
+#ifndef PAROL6_SAFE_NO_MOTION
     /// Home robot
+#ifndef PAROL6_DISABLE_HOMING
     if (PAROL6.command == 100)
     {
       home_command = 1;
@@ -513,6 +548,7 @@ void loop()
         home_command = 0;
       }
     }
+#endif
 
     /// JOG
     if (PAROL6.command == 123)
@@ -550,6 +586,7 @@ void loop()
         stepper[i].runSpeed();
       }
     }
+#endif
   }
 
   /***************************************************/

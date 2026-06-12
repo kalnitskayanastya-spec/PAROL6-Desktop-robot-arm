@@ -3,6 +3,26 @@
 #include "stm32f4xx_hal.h"
 #include "CAN.h"
 
+#ifndef PAROL6_CAN_TIMEOUT_MS
+#define PAROL6_CAN_TIMEOUT_MS 1000
+#endif
+
+static bool waitForCanInitMode(CAN_TypeDef *can)
+{
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+  uint32_t start = millis();
+  while (!(can->MSR & 0x1UL)) {
+    if ((millis() - start) >= PAROL6_CAN_TIMEOUT_MS) {
+      return false;
+    }
+    delay(1);
+  }
+  return true;
+#else
+  while (!(can->MSR & 0x1UL));
+  return true;
+#endif
+}
 
 
 /**
@@ -161,11 +181,15 @@ bool CANInit(BITRATE bitrate, int remap)
   }
 
   CAN1->MCR |= 0x1UL;                    // Require CAN1 to Initialization mode 
-  while (!(CAN1->MSR & 0x1UL));          // Wait for Initialization mode
+  if (!waitForCanInitMode(CAN1)) {
+    return false;
+  }
 
 
   CAN2->MCR |= 0x1UL;                    // Require CAN2 to Initialization mode
-  while (!(CAN2->MSR & 0x1UL));          // Wait for Initialization mode
+  if (!waitForCanInitMode(CAN2)) {
+    return false;
+  }
 
 
   //CAN1->MCR = 0x51UL;                  // Hardware initialization(No automatic retransmission)
@@ -208,7 +232,7 @@ bool CANInit(BITRATE bitrate, int remap)
 
   CAN1->FMR &= ~(0x1UL);                 // Deactivate initialization mode
 
-  uint16_t TimeoutMilliseconds = 1000;
+  uint16_t TimeoutMilliseconds = PAROL6_CAN_TIMEOUT_MS;
   bool can2 = false;
   CAN2->MCR &= ~(0x1UL);                 // Require CAN2 to normal mode  
 
