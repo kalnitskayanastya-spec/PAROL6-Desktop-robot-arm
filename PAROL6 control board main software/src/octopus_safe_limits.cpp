@@ -307,4 +307,38 @@ bool octopusSafeLimitsJointActive(int jointIndex)
   return activeState(limits[jointIndex]);
 }
 
+bool octopusSafeLimitsJointRaw(int jointIndex)
+{
+  if (!initialized || jointIndex < 0 || jointIndex >= LIMIT_COUNT) {
+    return false;
+  }
+
+  updateLimits();
+  return limits[jointIndex].rawState;
+}
+
+bool octopusSafeLimitsJointDebounced(int jointIndex)
+{
+  if (!initialized || jointIndex < 0 || jointIndex >= LIMIT_COUNT) {
+    return false;
+  }
+
+  updateLimits();
+  return limits[jointIndex].debouncedState;
+}
+
+bool octopusSafeLimitsJointInvert(int jointIndex)
+{
+  if (!initialized || jointIndex < 0 || jointIndex >= LIMIT_COUNT) {
+    return false;
+  }
+
+  return limits[jointIndex].invert;
+}
+
+unsigned long octopusSafeLimitsDebounceMs()
+{
+  return DEBOUNCE_MS;
+}
+
 #endif

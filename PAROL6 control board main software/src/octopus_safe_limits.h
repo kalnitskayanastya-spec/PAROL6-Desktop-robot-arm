@@ -8,6 +8,10 @@ void octopusSafeLimitsPoll();
 bool octopusSafeLimitsHandleCommand(const char *command);
 bool octopusSafeLimitsInitialized();
 bool octopusSafeLimitsJointActive(int jointIndex);
+bool octopusSafeLimitsJointRaw(int jointIndex);
+bool octopusSafeLimitsJointDebounced(int jointIndex);
+bool octopusSafeLimitsJointInvert(int jointIndex);
+unsigned long octopusSafeLimitsDebounceMs();
 
 #endif
 

@@ -11,6 +11,7 @@
 #include "iodefs.h"
 #include "octopus_commander_safety.h"
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "octopus_safe_homing_preflight.h"
 #include "octopus_safe_limits.h"
 #endif
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
@@ -101,6 +102,16 @@ static void printHelp()
   SerialUSB.println("limit_counts");
   SerialUSB.println("limit_reset_counts");
   SerialUSB.println("limit_safe");
+  SerialUSB.println("homing_preflight_help");
+  SerialUSB.println("homing_preflight_status");
+  SerialUSB.println("homing_preflight_check N");
+  SerialUSB.println("homing_preflight_all");
+  SerialUSB.println("homing_set_max_travel N STEPS");
+  SerialUSB.println("homing_set_dir N positive");
+  SerialUSB.println("homing_set_dir N negative");
+  SerialUSB.println("homing_mark_dir_validated N");
+  SerialUSB.println("homing_clear_config N");
+  SerialUSB.println("homing_preflight_safe");
   SerialUSB.println("motion_gate");
   SerialUSB.println("can_status");
   SerialUSB.println("tmc_status");
@@ -166,6 +177,8 @@ static void printVersion()
   SerialUSB.println("Baud: 115200");
   SerialUSB.println("Motion gate: ACTIVE");
   SerialUSB.println("Homing: BLOCKED");
+  SerialUSB.println("Homing preflight: available");
+  SerialUSB.println("Real homing: still BLOCKED");
   SerialUSB.println("Motion: BLOCKED");
   SerialUSB.println("CAN: timeout/fallback enabled");
 }
@@ -343,6 +356,9 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
   if (octopusSafeLimitsHandleCommand(command)) {
     return;
   }
+  if (octopusHomingPreflightHandleCommand(command)) {
+    return;
+  }
 #endif
 
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
@@ -394,6 +410,9 @@ void octopusSafeMainDiagPrintStartupHint()
 {
   SerialUSB.println("Type help for read-only diagnostic commands.");
   SerialUSB.println("Motion gate: ACTIVE");
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+  octopusHomingPreflightPrintStartup();
+#endif
   SerialUSB.flush();
 }
 
