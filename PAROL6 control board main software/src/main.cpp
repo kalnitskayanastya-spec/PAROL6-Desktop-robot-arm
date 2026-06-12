@@ -31,6 +31,9 @@
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
 #include "octopus_safe_main_diag.h"
 #endif
+#ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+#include "octopus_safe_joint_test.h"
+#endif
 
 // HardwareSerial Serial2(USART2); // compiles
 #define Serial SerialUSB
@@ -336,6 +339,10 @@ void setup()
   disable_motors();
 #endif
 
+#ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+  octopusSafeJointTestInit();
+#endif
+
   octopusDebugPrint("BOOT 21: before stepper config");
   stepper[5].setMaxSpeed(50000);
   stepper[5].setAcceleration(100);
@@ -361,6 +368,10 @@ void setup()
   stepper[4].setAcceleration(500);
   stepper[4].setSpeed(0);
   octopusDebugPrint("BOOT 22: after stepper config");
+
+#ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+  octopusSafeJointTestPrintStartup();
+#endif
 
   /// Freq is 90Mhz, with 128 prescale we get 703125, timer is 16bit
   /// It counts to 65535. 1 Tick is then equal to 1/703125 = 1.422222e-6
@@ -422,6 +433,9 @@ void loop()
 #endif
 
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
+  #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+  octopusSafeJointTestPoll();
+  #endif
   if (octopusSafeMainDiagPoll(PAROL6, Joint, NUMBER_OF_JOINTS))
   {
     return;
@@ -1703,3 +1717,48 @@ void disable_motors()
   digitalWrite(ENABLE_M4, HIGH);
   digitalWrite(ENABLE_M5, HIGH);
 }
+
+#ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+AccelStepper *octopusSafeJointTestSteppers()
+{
+  return stepper;
+}
+
+MotorStruct *octopusSafeJointTestJoints()
+{
+  return Joint;
+}
+
+void octopusSafeJointTestDisableAllMotors()
+{
+  disable_motors();
+}
+
+void octopusSafeJointTestSetMotorEnable(int jointIndex, bool enable)
+{
+  const int state = enable ? LOW : HIGH;
+  switch (jointIndex) {
+  case 0:
+    digitalWrite(GLOBAL_ENABLE, state);
+    break;
+  case 1:
+    digitalWrite(ENABLE_M1, state);
+    break;
+  case 2:
+    digitalWrite(ENABLE_M2, state);
+    break;
+  case 3:
+    digitalWrite(ENABLE_M3, state);
+    break;
+  case 4:
+    digitalWrite(ENABLE_M4, state);
+    break;
+  case 5:
+    digitalWrite(ENABLE_M5, state);
+    break;
+  default:
+    disable_motors();
+    break;
+  }
+}
+#endif

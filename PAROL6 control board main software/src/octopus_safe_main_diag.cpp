@@ -10,6 +10,9 @@
 #include "constants.h"
 #include "iodefs.h"
 #include "octopus_commander_safety.h"
+#ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+#include "octopus_safe_joint_test.h"
+#endif
 #include "octopus_safe_motion_gate.h"
 
 static char commandBuffer[80];
@@ -106,6 +109,17 @@ static void printHelp()
   SerialUSB.println("commander_counts");
   SerialUSB.println("commander_reset");
   SerialUSB.println("commander_policy");
+#ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+  SerialUSB.println("joint_test_help");
+  SerialUSB.println("joint_test_status");
+  SerialUSB.println("joint_select N");
+  SerialUSB.println("joint_arm");
+  SerialUSB.println("joint_disarm");
+  SerialUSB.println("joint_enable");
+  SerialUSB.println("joint_disable");
+  SerialUSB.println("joint_step N");
+  SerialUSB.println("joint_safe");
+#endif
 }
 
 static void printSafe()
@@ -348,6 +362,12 @@ static void printTmcStatus()
 
 static void processCommand(const char *command, Robot &robot, MotorStruct joints[], int jointCount)
 {
+#ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
+  if (octopusSafeJointTestHandleCommand(command)) {
+    return;
+  }
+#endif
+
   if (strcmp(command, "help") == 0) {
     printHelp();
   } else if (strcmp(command, "safe") == 0) {
