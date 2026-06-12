@@ -23,6 +23,11 @@ static const char *yesNo(bool value)
   return value ? "YES" : "NO";
 }
 
+static char levelBit(int pin)
+{
+  return digitalRead(pin) == HIGH ? '1' : '0';
+}
+
 static bool isShellByte(int value)
 {
   return value == '\r' || value == '\n' || value == '\b' || value == 127 || (value >= 32 && value <= 126);
@@ -59,108 +64,117 @@ static void trimCommand(char *command)
 
 static void printHelp()
 {
+  SerialUSB.println("This is PAROL6 OCTOPUS SAFE MAIN.");
+  SerialUSB.println("Read-only diagnostic shell.");
+  SerialUSB.println("Motion/homing/motor enable are blocked.");
+  SerialUSB.println();
   SerialUSB.println("Commands:");
   SerialUSB.println("help");
+  SerialUSB.println("version");
   SerialUSB.println("safe");
   SerialUSB.println("status");
-  SerialUSB.println("motors");
-  SerialUSB.println("limits");
+  SerialUSB.println("board");
   SerialUSB.println("pins");
-  SerialUSB.println("slots");
-  SerialUSB.println("gate");
-  SerialUSB.println("can");
-  SerialUSB.println("version");
-  SerialUSB.println();
-  SerialUSB.println("Read-only shell. Motion, homing, motor enable, and gripper commands are blocked.");
+  SerialUSB.println("limits");
+  SerialUSB.println("motion_gate");
+  SerialUSB.println("can_status");
+  SerialUSB.println("tmc_status");
 }
 
 static void printSafe()
 {
   SerialUSB.println("SAFETY:");
-  SerialUSB.println("- Octopus safe main diagnostic shell is read-only.");
-  SerialUSB.println("- No shell command enables motors.");
-  SerialUSB.println("- No shell command generates step pulses.");
-  SerialUSB.println("- Homing commands are blocked by motion gate.");
-  SerialUSB.println("- Motion commands are blocked by motion gate.");
-  SerialUSB.println("- Motor enable from full firmware is blocked by motion gate.");
-  SerialUSB.println("- Nothing should be flashed from this shell.");
+  SerialUSB.println("- This safe main build must not move motors.");
+  SerialUSB.println("- Motion gate is active.");
+  SerialUSB.println("- Homing is blocked.");
+  SerialUSB.println("- Full robot motion is blocked.");
+  SerialUSB.println("- Do not connect 24V directly to MCU inputs.");
+  SerialUSB.println("- Verify optocoupler outputs before connecting Stop inputs.");
+  SerialUSB.println("- Use diagnostic envs for motor-slot and optocoupler tests.");
 }
 
-static void printGate()
+static void printMotionGate()
 {
-  SerialUSB.println("Motion gate:");
-  SerialUSB.print("active: ");
-  SerialUSB.println(yesNo(!octopusSafeMotionEnabled()));
-  SerialUSB.println("homing commands: BLOCKED");
-  SerialUSB.println("motion commands: BLOCKED");
-  SerialUSB.println("motor enable from full firmware: BLOCKED");
-  SerialUSB.println("gripper CAN motion commands: BLOCKED");
+  SerialUSB.println("Motion gate: ACTIVE");
+  SerialUSB.println("Homing commands: BLOCKED");
+  SerialUSB.println("Motion commands: BLOCKED");
+  SerialUSB.println("Motor enable from full firmware: BLOCKED");
+  SerialUSB.println("Diagnostic motor_slot_test env is separate and unaffected.");
 }
 
-static void printCan()
+static void printCanStatus()
 {
-  SerialUSB.println("CAN:");
-  SerialUSB.println("timeout/fallback: enabled");
-  SerialUSB.print("timeout_ms: ");
 #ifdef PAROL6_CAN_TIMEOUT_MS
+  SerialUSB.print("CAN timeout/fallback enabled: PAROL6_CAN_TIMEOUT_MS=");
   SerialUSB.println(PAROL6_CAN_TIMEOUT_MS);
 #else
-  SerialUSB.println("default");
+  SerialUSB.println("CAN timeout/fallback enabled: PAROL6_CAN_TIMEOUT_MS=default");
 #endif
+  SerialUSB.println("CAN runtime init status is not exported yet in safe main.");
 }
 
 static void printVersion()
 {
-  SerialUSB.println("Version:");
-  SerialUSB.print("firmware VERSION: ");
-  SerialUSB.println(VERSION);
-  SerialUSB.println("env: octopus_parol6_main_safe_0000");
-  SerialUSB.println("board: BIGTREETECH Octopus Pro F446");
+  SerialUSB.println("--- PAROL6 OCTOPUS SAFE MAIN ---");
+  SerialUSB.println("Firmware: octopus_parol6_main_safe_0000");
+  SerialUSB.println("Board: BIGTREETECH Octopus Pro F446");
+  SerialUSB.print("Build: ");
+  SerialUSB.print(__DATE__);
+  SerialUSB.print(" ");
+  SerialUSB.println(__TIME__);
+  SerialUSB.println("Baud: 115200");
+  SerialUSB.println("Motion gate: ACTIVE");
+  SerialUSB.println("Homing: BLOCKED");
+  SerialUSB.println("Motion: BLOCKED");
+  SerialUSB.println("CAN: timeout/fallback enabled");
 }
 
-static void printSlots()
+static void printBoard()
 {
-  SerialUSB.println("Logical slot -> physical connector:");
-  SerialUSB.println("slot 0 -> MOTOR0 / Joint1");
-  SerialUSB.println("slot 1 -> MOTOR1 / Joint2");
-  SerialUSB.println("slot 2 -> MOTOR2 / Joint3");
-  SerialUSB.println("MOTOR2_2 -> extra physical connector / duplicate MOTOR2 output, NOT slot 3");
-  SerialUSB.println("slot 3 -> MOTOR3 / Joint4, physically AFTER MOTOR2_2");
-  SerialUSB.println("slot 4 -> MOTOR4 / Joint5");
-  SerialUSB.println("slot 5 -> MOTOR5 / Joint6");
+  SerialUSB.println("Board profile: BIGTREETECH Octopus Pro F446");
+  SerialUSB.println("MCU: STM32F446");
+  SerialUSB.println("SPI: MOSI=PA7 MISO=PA6 SCK=PA5");
+  SerialUSB.println("R_SENSE=0.075");
+  SerialUSB.println("Physical motor connector order:");
+  SerialUSB.println("MOTOR0 MOTOR1 MOTOR2 MOTOR2_2 MOTOR3 MOTOR4 MOTOR5 MOTOR6 MOTOR7");
+  SerialUSB.println("Important: MOTOR2_2 is not logical Joint4. Logical Joint4 is MOTOR3.");
 }
 
 static void printPins()
 {
-  SerialUSB.println("Octopus Pro F446 pins:");
-  SerialUSB.println("SPI: MOSI PA7, MISO PA6, SCK PA5");
-  SerialUSB.print("R_SENSE: ");
-  SerialUSB.println(R_SENSE, 3);
-  SerialUSB.println("MOTOR0/J1: STEP PF13 DIR PF12 CS PC4 EN PF14");
-  SerialUSB.println("MOTOR1/J2: STEP PG0 DIR PG1 CS PD11 EN PF15");
-  SerialUSB.println("MOTOR2/J3: STEP PF11 DIR PG3 CS PC6 EN PG5");
-  SerialUSB.println("MOTOR3/J4: STEP PG4 DIR PC1 CS PC7 EN PA0");
-  SerialUSB.println("MOTOR4/J5: STEP PF9 DIR PF10 CS PF2 EN PG2");
-  SerialUSB.println("MOTOR5/J6: STEP PC13 DIR PF0 CS PE4 EN PF1");
-  SerialUSB.println("Stop0..Stop5: PG6 PG9 PG10 PG11 PG12 PG13");
+  SerialUSB.println("Joint1 / MOTOR0 STEP=PF13 DIR=PF12 EN=PF14 CS=PC4");
+  SerialUSB.println("Joint2 / MOTOR1 STEP=PG0 DIR=PG1 EN=PF15 CS=PD11");
+  SerialUSB.println("Joint3 / MOTOR2 STEP=PF11 DIR=PG3 EN=PG5 CS=PC6");
+  SerialUSB.println("Joint4 / MOTOR3 STEP=PG4 DIR=PC1 EN=PA0 CS=PC7");
+  SerialUSB.println("Joint5 / MOTOR4 STEP=PF9 DIR=PF10 EN=PG2 CS=PF2");
+  SerialUSB.println("Joint6 / MOTOR5 STEP=PC13 DIR=PF0 EN=PF1 CS=PE4");
 }
 
 static void printLimits()
 {
-  SerialUSB.println("Stop/LIMIT inputs:");
-  SerialUSB.println("Input  Joint  PinName  Raw");
-  SerialUSB.print("Stop0  J1     LIMIT1   ");
+  SerialUSB.print("Stop0 / LIMIT1 / Joint1 = ");
   SerialUSB.println(levelName(digitalRead(LIMIT1)));
-  SerialUSB.print("Stop1  J2     LIMIT2   ");
+  SerialUSB.print("Stop1 / LIMIT2 / Joint2 = ");
   SerialUSB.println(levelName(digitalRead(LIMIT2)));
-  SerialUSB.print("Stop2  J3     LIMIT3   ");
+  SerialUSB.print("Stop2 / LIMIT3 / Joint3 = ");
   SerialUSB.println(levelName(digitalRead(LIMIT3)));
-  SerialUSB.print("Stop3  J4     LIMIT4   ");
+  SerialUSB.print("Stop3 / LIMIT4 / Joint4 = ");
   SerialUSB.println(levelName(digitalRead(LIMIT4)));
-  SerialUSB.print("Stop4  J5     LIMIT5   ");
+  SerialUSB.print("Stop4 / LIMIT5 / Joint5 = ");
   SerialUSB.println(levelName(digitalRead(LIMIT5)));
-  SerialUSB.print("Stop5  J6     LIMIT6   ");
+  SerialUSB.print("Stop5 / LIMIT6 / Joint6 = ");
   SerialUSB.println(levelName(digitalRead(LIMIT6)));
+}
+
+static void printLimitsBrief()
+{
+  SerialUSB.print("LIMITS=");
+  SerialUSB.print(levelBit(LIMIT1));
+  SerialUSB.print(levelBit(LIMIT2));
+  SerialUSB.print(levelBit(LIMIT3));
+  SerialUSB.print(levelBit(LIMIT4));
+  SerialUSB.print(levelBit(LIMIT5));
+  SerialUSB.println(levelBit(LIMIT6));
 }
 
 static void printMotorEnables()
@@ -205,26 +219,31 @@ static void printJointStatus(const MotorStruct joints[], int jointCount)
 
 static void printStatus(const Robot &robot, const MotorStruct joints[], int jointCount)
 {
-  SerialUSB.println("--- OCTOPUS SAFE MAIN STATUS ---");
-  SerialUSB.println("mode: PAROL6_OCTOPUS_SAFE_MAIN");
-  SerialUSB.print("motion_gate_active: ");
-  SerialUSB.println(yesNo(!octopusSafeMotionEnabled()));
-  SerialUSB.print("robot_disabled: ");
+  SerialUSB.println("SAFE_MAIN=ON");
+  SerialUSB.println("BOARD=OCTOPUS_PRO_F446");
+  SerialUSB.println("MOTION_GATE=ACTIVE");
+  SerialUSB.println("HOMING=BLOCKED");
+  SerialUSB.println("MOTION=BLOCKED");
+#ifdef PAROL6_CAN_TIMEOUT_MS
+  SerialUSB.print("CAN=timeout/fallback enabled, timeout_ms=");
+  SerialUSB.println(PAROL6_CAN_TIMEOUT_MS);
+#else
+  SerialUSB.println("CAN=timeout/fallback enabled");
+#endif
+  printLimitsBrief();
+  SerialUSB.print("ROBOT_DISABLED=");
   SerialUSB.println(robot.disabled);
-  SerialUSB.print("last_command: ");
+  SerialUSB.print("LAST_COMMAND=");
   SerialUSB.println(robot.command);
-  SerialUSB.print("timeout_ms_commanded: ");
-  SerialUSB.println(robot.Timeout);
-  SerialUSB.print("timeout_error: ");
-  SerialUSB.println(robot.timeout_error);
-  SerialUSB.print("estop_raw: ");
-  SerialUSB.println(levelName(digitalRead(ESTOP)));
-  SerialUSB.print("input1_raw: ");
-  SerialUSB.println(levelName(digitalRead(INPUT1)));
-  SerialUSB.print("input2_raw: ");
-  SerialUSB.println(levelName(digitalRead(INPUT2)));
-  printMotorEnables();
-  printJointStatus(joints, jointCount);
+  SerialUSB.print("JOINTS_REPORTED=");
+  SerialUSB.println(jointCount);
+  (void)joints;
+}
+
+static void printTmcStatus()
+{
+  SerialUSB.println("TMC read-only status is not wired into safe main yet.");
+  SerialUSB.println("Use octopus_parol6_motor_slot_test_0000 for TMC SPI diagnostic.");
 }
 
 static void processCommand(const char *command, Robot &robot, MotorStruct joints[], int jointCount)
@@ -235,19 +254,18 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
     printSafe();
   } else if (strcmp(command, "status") == 0) {
     printStatus(robot, joints, jointCount);
-  } else if (strcmp(command, "motors") == 0) {
-    printMotorEnables();
-    printJointStatus(joints, jointCount);
+  } else if (strcmp(command, "board") == 0) {
+    printBoard();
   } else if (strcmp(command, "limits") == 0) {
     printLimits();
   } else if (strcmp(command, "pins") == 0) {
     printPins();
-  } else if (strcmp(command, "slots") == 0) {
-    printSlots();
-  } else if (strcmp(command, "gate") == 0) {
-    printGate();
-  } else if (strcmp(command, "can") == 0) {
-    printCan();
+  } else if (strcmp(command, "motion_gate") == 0) {
+    printMotionGate();
+  } else if (strcmp(command, "can_status") == 0) {
+    printCanStatus();
+  } else if (strcmp(command, "tmc_status") == 0) {
+    printTmcStatus();
   } else if (strcmp(command, "version") == 0) {
     printVersion();
   } else {
@@ -261,7 +279,8 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
 
 void octopusSafeMainDiagPrintStartupHint()
 {
-  SerialUSB.println("Safe main diagnostic shell: type help.");
+  SerialUSB.println("Type help for read-only diagnostic commands.");
+  SerialUSB.println("Motion gate: ACTIVE");
   SerialUSB.flush();
 }
 

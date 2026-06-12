@@ -224,7 +224,11 @@ void setup()
 #endif
 
   octopusDebugPrint("BOOT 02: before Serial begin");
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+  Serial.begin(115200);
+#else
   Serial.begin(3000000);
+#endif
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
   delay(500);
   printOctopusSafeMainReport();
