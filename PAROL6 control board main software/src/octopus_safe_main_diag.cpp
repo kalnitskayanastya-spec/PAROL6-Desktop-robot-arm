@@ -10,6 +10,9 @@
 #include "constants.h"
 #include "iodefs.h"
 #include "octopus_commander_safety.h"
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "octopus_safe_limits.h"
+#endif
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
 #include "octopus_safe_joint_test.h"
 #endif
@@ -20,19 +23,9 @@ static size_t commandLength = 0;
 
 extern TMC5160Stepper driver[];
 
-static const char *levelName(int value)
-{
-  return value == HIGH ? "HIGH" : "LOW";
-}
-
 static const char *yesNo(bool value)
 {
   return value ? "YES" : "NO";
-}
-
-static char levelBit(int pin)
-{
-  return digitalRead(pin) == HIGH ? '1' : '0';
 }
 
 static void printHex8(uint8_t value)
@@ -101,6 +94,13 @@ static void printHelp()
   SerialUSB.println("pins");
   SerialUSB.println("motor_backend");
   SerialUSB.println("limits");
+  SerialUSB.println("limits_raw");
+  SerialUSB.println("limits_config");
+  SerialUSB.println("limit_invert N on");
+  SerialUSB.println("limit_invert N off");
+  SerialUSB.println("limit_counts");
+  SerialUSB.println("limit_reset_counts");
+  SerialUSB.println("limit_safe");
   SerialUSB.println("motion_gate");
   SerialUSB.println("can_status");
   SerialUSB.println("tmc_status");
@@ -205,49 +205,22 @@ static void printMotorBackend()
   SerialUSB.println("Important: MOTOR2_2 is not logical Joint4.");
 }
 
-static void printLimits()
-{
-  SerialUSB.print("Stop0 / LIMIT1 / Joint1 = ");
-  SerialUSB.println(levelName(digitalRead(LIMIT1)));
-  SerialUSB.print("Stop1 / LIMIT2 / Joint2 = ");
-  SerialUSB.println(levelName(digitalRead(LIMIT2)));
-  SerialUSB.print("Stop2 / LIMIT3 / Joint3 = ");
-  SerialUSB.println(levelName(digitalRead(LIMIT3)));
-  SerialUSB.print("Stop3 / LIMIT4 / Joint4 = ");
-  SerialUSB.println(levelName(digitalRead(LIMIT4)));
-  SerialUSB.print("Stop4 / LIMIT5 / Joint5 = ");
-  SerialUSB.println(levelName(digitalRead(LIMIT5)));
-  SerialUSB.print("Stop5 / LIMIT6 / Joint6 = ");
-  SerialUSB.println(levelName(digitalRead(LIMIT6)));
-}
-
-static void printLimitsBrief()
-{
-  SerialUSB.print("LIMITS=");
-  SerialUSB.print(levelBit(LIMIT1));
-  SerialUSB.print(levelBit(LIMIT2));
-  SerialUSB.print(levelBit(LIMIT3));
-  SerialUSB.print(levelBit(LIMIT4));
-  SerialUSB.print(levelBit(LIMIT5));
-  SerialUSB.println(levelBit(LIMIT6));
-}
-
 static void printMotorEnables()
 {
   SerialUSB.println("Motor enable pins:");
   SerialUSB.println("HIGH = disabled, LOW = enabled");
   SerialUSB.print("MOTOR0/J1 EN PF14: ");
-  SerialUSB.println(levelName(digitalRead(GLOBAL_ENABLE)));
+  SerialUSB.println(digitalRead(GLOBAL_ENABLE) == HIGH ? "HIGH" : "LOW");
   SerialUSB.print("MOTOR1/J2 EN PF15: ");
-  SerialUSB.println(levelName(digitalRead(ENABLE_M1)));
+  SerialUSB.println(digitalRead(ENABLE_M1) == HIGH ? "HIGH" : "LOW");
   SerialUSB.print("MOTOR2/J3 EN PG5: ");
-  SerialUSB.println(levelName(digitalRead(ENABLE_M2)));
+  SerialUSB.println(digitalRead(ENABLE_M2) == HIGH ? "HIGH" : "LOW");
   SerialUSB.print("MOTOR3/J4 EN PA0: ");
-  SerialUSB.println(levelName(digitalRead(ENABLE_M3)));
+  SerialUSB.println(digitalRead(ENABLE_M3) == HIGH ? "HIGH" : "LOW");
   SerialUSB.print("MOTOR4/J5 EN PG2: ");
-  SerialUSB.println(levelName(digitalRead(ENABLE_M4)));
+  SerialUSB.println(digitalRead(ENABLE_M4) == HIGH ? "HIGH" : "LOW");
   SerialUSB.print("MOTOR5/J6 EN PF1: ");
-  SerialUSB.println(levelName(digitalRead(ENABLE_M5)));
+  SerialUSB.println(digitalRead(ENABLE_M5) == HIGH ? "HIGH" : "LOW");
 }
 
 static void printJointStatus(const MotorStruct joints[], int jointCount)
@@ -268,7 +241,7 @@ static void printJointStatus(const MotorStruct joints[], int jointCount)
     SerialUSB.print("       ");
     SerialUSB.print(joints[i].homed);
     SerialUSB.print("      ");
-    SerialUSB.println(levelName(digitalRead(joints[i].LIMIT)));
+    SerialUSB.println(digitalRead(joints[i].LIMIT) == HIGH ? "HIGH" : "LOW");
   }
 }
 
@@ -285,7 +258,11 @@ static void printStatus(const Robot &robot, const MotorStruct joints[], int join
 #else
   SerialUSB.println("CAN=timeout/fallback enabled");
 #endif
-  printLimitsBrief();
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+  octopusSafeLimitsHandleCommand("limits_brief");
+#else
+  SerialUSB.println("LIMITS=unavailable");
+#endif
   SerialUSB.print("ROBOT_DISABLED=");
   SerialUSB.println(robot.disabled);
   SerialUSB.print("LAST_COMMAND=");
@@ -362,6 +339,12 @@ static void printTmcStatus()
 
 static void processCommand(const char *command, Robot &robot, MotorStruct joints[], int jointCount)
 {
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+  if (octopusSafeLimitsHandleCommand(command)) {
+    return;
+  }
+#endif
+
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
   if (octopusSafeJointTestHandleCommand(command)) {
     return;
@@ -376,8 +359,6 @@ static void processCommand(const char *command, Robot &robot, MotorStruct joints
     printStatus(robot, joints, jointCount);
   } else if (strcmp(command, "board") == 0) {
     printBoard();
-  } else if (strcmp(command, "limits") == 0) {
-    printLimits();
   } else if (strcmp(command, "pins") == 0) {
     printPins();
   } else if (strcmp(command, "motor_backend") == 0) {

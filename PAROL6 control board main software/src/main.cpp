@@ -31,6 +31,9 @@
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
 #include "octopus_safe_main_diag.h"
 #endif
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "octopus_safe_limits.h"
+#endif
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
 #include "octopus_safe_joint_test.h"
 #endif
@@ -339,6 +342,10 @@ void setup()
   disable_motors();
 #endif
 
+#if defined(PAROL6_BOARD_OCTOPUS_PRO_F446) && defined(PAROL6_OCTOPUS_SAFE_MAIN)
+  octopusSafeLimitsInit();
+#endif
+
 #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
   octopusSafeJointTestInit();
 #endif
@@ -433,6 +440,9 @@ void loop()
 #endif
 
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
+  #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+  octopusSafeLimitsPoll();
+  #endif
   #ifdef PAROL6_OCTOPUS_SAFE_JOINT_TEST
   octopusSafeJointTestPoll();
   #endif

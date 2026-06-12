@@ -6,6 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "octopus_safe_limits.h"
+#endif
+
 static const int JOINT_COUNT = 6;
 static const int NO_JOINT = -1;
 static const int MAX_SAFE_STEPS = 200;
@@ -101,6 +105,7 @@ static void printJointTestHelp()
   SerialUSB.println("Only one selected joint can be enabled.");
   SerialUSB.println("Homing is blocked. Commander motion is blocked. Cartesian motion is blocked.");
   SerialUSB.println("Max step command is limited to 200.");
+  SerialUSB.println("Limit active blocks joint_step until polarity/direction are validated.");
   SerialUSB.println();
   SerialUSB.println("Commands:");
   SerialUSB.println("joint_test_help");
@@ -122,6 +127,7 @@ static void printJointSafe()
   SerialUSB.println("Commander motion commands are blocked.");
   SerialUSB.println("Cartesian motion is blocked.");
   SerialUSB.println("Max step command is limited.");
+  SerialUSB.println("Limit active blocks joint_step until polarity/direction are validated.");
   SerialUSB.println("Motors are disabled on startup.");
   SerialUSB.println("This mode is for controlled bring-up only.");
 }
@@ -144,6 +150,10 @@ static void printJointStatus()
   SerialUSB.println(selectedJointEnabled ? "YES" : "NO");
   SerialUSB.print("max_step_limit=");
   SerialUSB.println(MAX_SAFE_STEPS);
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+  SerialUSB.print("limit_blocks_joint_step=");
+  SerialUSB.println(octopusSafeLimitsInitialized() ? "YES" : "NO");
+#endif
   SerialUSB.println("Mapping:");
   SerialUSB.println("Joint1 -> MOTOR0");
   SerialUSB.println("Joint2 -> MOTOR1");
@@ -227,6 +237,12 @@ static void stepSelectedJoint(long steps)
     SerialUSB.println("Refusing joint_step: N must be non-zero.");
     return;
   }
+#ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+  if (octopusSafeLimitsInitialized() && octopusSafeLimitsJointActive(selectedJoint)) {
+    SerialUSB.println("Refusing joint_step: selected joint limit is active.");
+    return;
+  }
+#endif
 
   AccelStepper *steppers = octopusSafeJointTestSteppers();
   MotorStruct *joints = octopusSafeJointTestJoints();
