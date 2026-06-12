@@ -14,7 +14,10 @@ struct DiagInput {
 };
 
 // Octopus Stop0..Stop5 / DIAG0..DIAG5 pins, matching the existing Octopus map.
-// Confirmed on DIAG0 with NPN NO sensor through optocoupler: idle=HIGH, active=LOW.
+// Hardware validated through optocouplers on DIAG0..DIAG5.
+// Idle raw=111111; a triggered NPN NO sensor drives its DIAG input LOW.
+// Expected single-trigger masks: DIAG0=011111, DIAG1=101111, DIAG2=110111,
+// DIAG3=111011, DIAG4=111101, DIAG5=111110.
 static const DiagInput diagInputs[DIAG_COUNT] = {
     {"DIAG0", "PG6", PG6},
     {"DIAG1", "PG9", PG9},
