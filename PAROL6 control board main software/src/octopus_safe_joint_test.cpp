@@ -7,6 +7,7 @@
 #include <string.h>
 
 #ifdef PAROL6_BOARD_OCTOPUS_PRO_F446
+#include "octopus_safe_homing_dryrun.h"
 #include "octopus_safe_homing_preflight.h"
 #include "octopus_safe_limits.h"
 #endif
@@ -119,6 +120,7 @@ static void printJointTestHelp()
   SerialUSB.println("joint_step N");
   SerialUSB.println("joint_safe");
   SerialUSB.println("homing_preflight_help");
+  SerialUSB.println("homing_dryrun_help");
 }
 
 static void printJointSafe()
@@ -308,6 +310,7 @@ void octopusSafeJointTestPrintStartup()
   SerialUSB.println("Only bounded single-joint movement is allowed.");
   SerialUSB.println("Homing blocked. Commander motion blocked. Cartesian motion blocked.");
   SerialUSB.println("Homing preflight: available");
+  SerialUSB.println("Homing dry-run: available");
   SerialUSB.println("Real homing: still BLOCKED");
   SerialUSB.println("Type joint_test_help.");
   SerialUSB.flush();

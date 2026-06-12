@@ -11,6 +11,8 @@ bool octopusHomingPreflightPass(uint8_t jointIndex);
 const char *octopusHomingPreflightLastReason(uint8_t jointIndex);
 void octopusPrintHomingPreflight(Stream &out, uint8_t jointIndex);
 void octopusHomingPreflightPrintStartup();
+long octopusHomingPreflightMaxTravel(uint8_t jointIndex);
+const char *octopusHomingPreflightDirectionName(uint8_t jointIndex);
 
 #endif
 

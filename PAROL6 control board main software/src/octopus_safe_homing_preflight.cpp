@@ -409,4 +409,20 @@ void octopusHomingPreflightPrintStartup()
   SerialUSB.flush();
 }
 
+long octopusHomingPreflightMaxTravel(uint8_t jointIndex)
+{
+  if (jointIndex >= JOINT_COUNT) {
+    return 0;
+  }
+  return configs[jointIndex].maxTravelSteps;
+}
+
+const char *octopusHomingPreflightDirectionName(uint8_t jointIndex)
+{
+  if (jointIndex >= JOINT_COUNT) {
+    return "invalid joint";
+  }
+  return directionName(configs[jointIndex].direction);
+}
+
 #endif
