@@ -25,6 +25,9 @@
 #include "CAN.h"
 #include "coms_CAN.h"
 #include "octopus_safe_motion_gate.h"
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+#include "octopus_safe_main_diag.h"
+#endif
 
 // HardwareSerial Serial2(USART2); // compiles
 #define Serial SerialUSB
@@ -225,6 +228,7 @@ void setup()
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
   delay(500);
   printOctopusSafeMainReport();
+  octopusSafeMainDiagPrintStartupHint();
 #endif
   octopusDebugPrint("BOOT 03: after Serial begin");
 
@@ -403,6 +407,13 @@ void loop()
     SerialUSB.flush();
   }
   return;
+#endif
+
+#ifdef PAROL6_OCTOPUS_SAFE_MAIN
+  if (octopusSafeMainDiagPoll(PAROL6, Joint, NUMBER_OF_JOINTS))
+  {
+    return;
+  }
 #endif
 
   Power_switch_managment();
