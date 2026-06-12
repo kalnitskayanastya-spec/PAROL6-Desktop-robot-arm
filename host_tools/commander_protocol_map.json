@@ -1,0 +1,179 @@
+{
+  "metadata": {
+    "name": "PAROL6 Commander / GUI serial protocol map",
+    "status": "partially_confirmed_from_firmware_and_legacy_host_code",
+    "generated_for": "octopus_parol6_main_safe_0000 read-only host probe",
+    "safety_note": "This map is for protocol exploration only. It is not a motion, homing, or robot-control implementation.",
+    "primary_firmware": "PAROL6 control board main software/src/main.cpp",
+    "safe_classification": "PAROL6 control board main software/src/octopus_commander_safety.cpp",
+    "legacy_host_reference": "Extras/LEAP motion control code/PAROL6_LEAP_comms_LEAP.py"
+  },
+  "serial": {
+    "transport": "USB CDC SerialUSB via #define Serial SerialUSB",
+    "safe_main_baud": 115200,
+    "original_main_baud": 3000000,
+    "source": "PAROL6 control board main software/src/main.cpp:234-239"
+  },
+  "packet_format": {
+    "encoding": "binary",
+    "byte_order": "big_endian_for_16_bit_and_24_bit_signed_fields",
+    "start_bytes": ["0xff", "0xff", "0xff"],
+    "end_bytes": ["0x01", "0x02"],
+    "length_byte_rule": "Length byte counts all bytes after the length byte, including CRC/convention byte and end bytes.",
+    "host_to_firmware": {
+      "length_byte": 52,
+      "payload_without_end_bytes": 50,
+      "fields": [
+        {"name": "joint_commanded_position", "offset": 0, "count": 6, "width_bytes": 3, "signed": true, "notes": "Joint[0..5].commanded_position"},
+        {"name": "joint_commanded_velocity", "offset": 18, "count": 6, "width_bytes": 3, "signed": true, "notes": "Joint[0..5].commanded_velocity"},
+        {"name": "command", "offset": 36, "width_bytes": 1, "signed": false, "notes": "PAROL6.command"},
+        {"name": "affected_joint", "offset": 37, "width_bytes": 1, "signed": false, "notes": "PAROL6.Affected_joint"},
+        {"name": "inout", "offset": 38, "width_bytes": 1, "signed": false, "notes": "bitArray[2] -> commanded_OUT1, bitArray[3] -> commanded_OUT2"},
+        {"name": "timeout", "offset": 39, "width_bytes": 1, "signed": false, "notes": "PAROL6.Timeout"},
+        {"name": "gripper_position", "offset": 40, "width_bytes": 2, "signed": true},
+        {"name": "gripper_speed", "offset": 42, "width_bytes": 2, "signed": true},
+        {"name": "gripper_current", "offset": 44, "width_bytes": 2, "signed": true},
+        {"name": "gripper_command", "offset": 46, "width_bytes": 1, "signed": false},
+        {"name": "gripper_mode", "offset": 47, "width_bytes": 1, "signed": false},
+        {"name": "gripper_id", "offset": 48, "width_bytes": 1, "signed": false},
+        {"name": "crc_or_convention_byte", "offset": 49, "width_bytes": 1, "signed": false, "notes": "Firmware reads but does not validate it; legacy Python sends 228."},
+        {"name": "end_bytes", "offset": 50, "width_bytes": 2, "value": ["0x01", "0x02"]}
+      ],
+      "sources": [
+        "PAROL6 control board main software/src/main.cpp:693-790",
+        "PAROL6 control board main software/src/main.cpp:862-949",
+        "Extras/LEAP motion control code/PAROL6_LEAP_comms_LEAP.py:410-482"
+      ]
+    },
+    "firmware_to_host": {
+      "length_byte": 56,
+      "payload_without_end_bytes": 54,
+      "fields": [
+        {"name": "joint_position", "offset": 0, "count": 6, "width_bytes": 3, "signed": true},
+        {"name": "joint_speed", "offset": 18, "count": 6, "width_bytes": 3, "signed": true},
+        {"name": "homed_bits", "offset": 36, "width_bytes": 1},
+        {"name": "io_bits", "offset": 37, "width_bytes": 1},
+        {"name": "temperature_error_bits", "offset": 38, "width_bytes": 1},
+        {"name": "position_error_bits", "offset": 39, "width_bytes": 1},
+        {"name": "timing_data", "offset": 40, "width_bytes": 2, "signed": false},
+        {"name": "timeout_error", "offset": 42, "width_bytes": 1},
+        {"name": "xtr2_command_echo", "offset": 43, "width_bytes": 1, "notes": "Pack_data currently writes PAROL6.command here."},
+        {"name": "gripper_id", "offset": 44, "width_bytes": 1},
+        {"name": "gripper_position", "offset": 45, "width_bytes": 2, "signed": true},
+        {"name": "gripper_speed", "offset": 47, "width_bytes": 2, "signed": true},
+        {"name": "gripper_current", "offset": 49, "width_bytes": 2, "signed": true},
+        {"name": "gripper_status", "offset": 51, "width_bytes": 1},
+        {"name": "object_detection", "offset": 52, "width_bytes": 1},
+        {"name": "crc_or_convention_byte", "offset": 53, "width_bytes": 1, "notes": "Firmware writes PAROL6.CRC_value, default 212; no CRC calculation found."},
+        {"name": "end_bytes", "offset": 54, "width_bytes": 2, "value": ["0x01", "0x02"]}
+      ],
+      "sources": [
+        "PAROL6 control board main software/src/main.cpp:1079-1174",
+        "Extras/LEAP motion control code/PAROL6_LEAP_comms_LEAP.py:269-305"
+      ]
+    },
+    "checksum_crc": {
+      "status": "not_confirmed_as_real_crc",
+      "notes": "The byte is present in both directions but no checksum/CRC validation or calculation was found in firmware. Treat as a convention byte only."
+    }
+  },
+  "commands": [
+    {
+      "id": 255,
+      "risk": "READ_ONLY",
+      "meaning": "Commander heartbeat/status/dummy packet; no movement handler confirmed.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 531-543; octopus_commander_safety.cpp lines 23-30",
+      "allowed_in_safe_host_probe": true,
+      "notes": "Safe probe may encode/send this command by default."
+    },
+    {
+      "id": 102,
+      "risk": "LOW",
+      "meaning": "Disable robot.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 561-565; octopus_commander_safety.cpp lines 28-30",
+      "allowed_in_safe_host_probe": false,
+      "notes": "Low risk in safe firmware, but host probe refuses unless --allow-low is explicitly used."
+    },
+    {
+      "id": 103,
+      "risk": "LOW",
+      "meaning": "Clear error / reset homing state.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 568-572; octopus_commander_safety.cpp lines 28-30",
+      "allowed_in_safe_host_probe": false,
+      "notes": "Low risk in safe firmware, but host probe refuses unless --allow-low is explicitly used."
+    },
+    {
+      "id": 101,
+      "risk": "MEDIUM",
+      "meaning": "Enable robot/motors.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 547-558; octopus_commander_safety.cpp lines 31-32",
+      "allowed_in_safe_host_probe": false,
+      "notes": "Safe firmware blocks motor enable from full firmware path."
+    },
+    {
+      "id": 123,
+      "risk": "HIGH",
+      "meaning": "Joint jog.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 585-588 and 630-646; octopus_commander_safety.cpp lines 33-35",
+      "allowed_in_safe_host_probe": false,
+      "notes": "Motion command; never sent by safe probe."
+    },
+    {
+      "id": 156,
+      "risk": "HIGH",
+      "meaning": "Go-to-position / position command.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 590-593 and 651-666; octopus_commander_safety.cpp lines 33-35",
+      "allowed_in_safe_host_probe": false,
+      "notes": "Motion command; never sent by safe probe."
+    },
+    {
+      "id": 69,
+      "risk": "DANGEROUS",
+      "meaning": "Repeatability/test motion.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 442-529; octopus_commander_safety.cpp lines 36-38",
+      "allowed_in_safe_host_probe": false,
+      "notes": "Dangerous motion sequence; never sent by safe probe."
+    },
+    {
+      "id": 100,
+      "risk": "DANGEROUS",
+      "meaning": "Homing.",
+      "status": "confirmed",
+      "source": "original firmware command handler and octopus_commander_safety classification",
+      "source_file": "PAROL6 control board main software/src/main.cpp",
+      "source_line_function": "loop() lines 575-578 and 602-614; octopus_commander_safety.cpp lines 36-38",
+      "allowed_in_safe_host_probe": false,
+      "notes": "Homing is blocked in safe main and never sent by safe probe."
+    }
+  ],
+  "safe_main_shell": {
+    "commands_confirmed": [
+      "commander_policy",
+      "commander_status",
+      "commander_last",
+      "commander_counts"
+    ],
+    "source": "PAROL6 control board main software/src/octopus_safe_main_diag.cpp:371-380"
+  }
+}
