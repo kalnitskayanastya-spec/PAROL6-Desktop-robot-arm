@@ -24,6 +24,7 @@
 #include "motor_init.h"
 #include "CAN.h"
 #include "coms_CAN.h"
+#include "octopus_safe_motion_gate.h"
 
 // HardwareSerial Serial2(USART2); // compiles
 #define Serial SerialUSB
@@ -142,6 +143,23 @@ void Get_data();
 void reset_homing();
 void Handle_gripper();
 
+static bool blockOctopusSafeMotionCommand(const char *reason)
+{
+  if (octopusAllowMotionCommand(reason)) {
+    return false;
+  }
+
+  home_command = 0;
+  move1 = 0;
+  move2 = 0;
+  move3 = 0;
+  move4 = 0;
+  PAROL6.disabled = 1;
+  PAROL6.command = 255;
+  disable_motors();
+  return true;
+}
+
 #ifdef PAROL6_OCTOPUS_SAFE_MAIN
 static void printOctopusSafeMainReport()
 {
@@ -153,6 +171,10 @@ static void printOctopusSafeMainReport()
   Serial.println("Motors: disabled on startup");
   Serial.println("Homing: disabled");
   Serial.println("Motion: disabled unless explicitly enabled later");
+  Serial.println("Motion gate: ACTIVE");
+  Serial.println("Homing commands: BLOCKED");
+  Serial.println("Motion commands: BLOCKED");
+  Serial.println("Motor enable from full firmware: BLOCKED");
   Serial.flush();
 }
 #endif
@@ -394,7 +416,12 @@ void loop()
 
   /// Robot repetability
 
-#ifndef PAROL6_SAFE_NO_MOTION
+#if defined(PAROL6_SAFE_NO_MOTION)
+  if (PAROL6.command == 69)
+  {
+    blockOctopusSafeMotionCommand("repeatability/test motion");
+  }
+#else
   if (PAROL6.command == 69)
   {
     if (setup_var == 0)
@@ -498,6 +525,7 @@ void loop()
     reset_homing();
     home_command = 0;
 #ifdef PAROL6_SAFE_NO_MOTION
+    blockOctopusSafeMotionCommand("motor enable from host command");
     PAROL6.disabled = 1;
 #else
     PAROL6.disabled = 0;
@@ -517,6 +545,25 @@ void loop()
     home_command = 0;
     reset_homing();
   }
+
+#if defined(PAROL6_SAFE_NO_MOTION)
+  if (PAROL6.command == 100)
+  {
+    blockOctopusSafeMotionCommand("homing command");
+  }
+  else if (PAROL6.command == 255 && home_command == 1)
+  {
+    blockOctopusSafeMotionCommand("homing continuation");
+  }
+  else if (PAROL6.command == 123)
+  {
+    blockOctopusSafeMotionCommand("joint jog command");
+  }
+  else if (PAROL6.command == 156)
+  {
+    blockOctopusSafeMotionCommand("go to position command");
+  }
+#endif
 
   // If robot is disabled, disable all move commands
   if (PAROL6.disabled == 0)
@@ -722,6 +769,12 @@ void Get_data()
 
 void Handle_gripper()
 {
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+  if (!octopusAllowMotionCommand("gripper CAN command"))
+  {
+    return;
+  }
+#endif
 
   
     /// Here unpack gripper command data to bits and see what needs to be sent to the gripper
@@ -1111,6 +1164,11 @@ void reset_homing()
 /// @return If the robot is homed or not
 int home_all()
 {
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+  blockOctopusSafeMotionCommand("home_all");
+  return homed;
+#endif
+
   /*
     static int run_once = 0;
     static int joint123_stage1 = 0;
@@ -1574,6 +1632,12 @@ void Init_motor_drivers(int num)
 
 void enable_motors()
 {
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+  octopusReportBlockedMotion("enable_motors");
+  disable_motors();
+  return;
+#endif
+
   digitalWrite(GLOBAL_ENABLE, LOW);
   digitalWrite(ENABLE_M1, LOW);
   digitalWrite(ENABLE_M2, LOW);

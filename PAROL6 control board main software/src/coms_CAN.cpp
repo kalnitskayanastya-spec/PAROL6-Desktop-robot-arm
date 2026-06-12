@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 
 #include "coms_CAN.h"
+#include "octopus_safe_motion_gate.h"
 
 /*
 The node with the lowest ID will always win the arbitration and therefore has the highest priority.
@@ -168,6 +169,11 @@ void CAN_protocol(Stream &Serialport)
 /// @brief Griper calib; direction: Mainboard -> Gripper 
 void Send_gripper_cal()
 {
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+    if (!octopusAllowMotionCommand("gripper calibration CAN command")) {
+        return;
+    }
+#endif
 
     CAN_TX_msg.data[0] = 0x00;
     CAN_TX_msg.data[1] = 0x00;
@@ -188,6 +194,12 @@ void Send_gripper_cal()
 /// @brief Send Gripper packet; direction: Mainboard -> Gripper 
 void Send_gripper_pack()
 {
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+    if (!octopusAllowMotionCommand("gripper motion CAN command")) {
+        return;
+    }
+#endif
+
     // pos setpoint 1 byte
     // speed setpoint 1 byte
     // current setpoint 2 byte
@@ -215,6 +227,11 @@ void Send_gripper_pack()
 /// @brief Send Gripper packet empty; direction: Mainboard -> Gripper 
 void Send_gripper_pack_empty()
 {
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+    if (!octopusAllowMotionCommand("gripper empty CAN command")) {
+        return;
+    }
+#endif
 
     CAN_TX_msg.data[0] = 0x00;;
     CAN_TX_msg.data[1] = 0x00;
@@ -236,6 +253,12 @@ void Send_gripper_pack_empty()
 /// @brief Clear error; direction: Mainboard -> Gripper 
 void Send_clear_error()
 {
+#if defined(PAROL6_OCTOPUS_SAFE_MAIN) || defined(PAROL6_SAFE_NO_MOTION)
+    if (!octopusAllowMotionCommand("gripper clear-error CAN command")) {
+        return;
+    }
+#endif
+
     CAN_TX_msg.data[0] = 0x00;
     CAN_TX_msg.data[1] = 0x00;
     CAN_TX_msg.data[2] = 0x00;
